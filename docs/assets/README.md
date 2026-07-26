@@ -35,6 +35,14 @@ sky, with no people, text, logos, watermark, or recognizable landmark.
 deterministic source in `video/scripts/generate-audio.mjs`. It does not include
 an external music sample.
 
+## Product Video
+
+The complete product video is generated from the project-authored Remotion
+source under `video/`. The public README references the H.264/AAC render through
+GitHub's public attachment storage rather than committing the rendered MP4 to
+the source history. The published render is 1920x1080, 30 fps, and approximately
+55 seconds long.
+
 When replacing an asset, record its origin and reproduction path here. Do not
 add stock, scraped, customer, or production media without a documented license
 and explicit publication review.
