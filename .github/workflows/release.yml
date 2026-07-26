@@ -116,14 +116,14 @@ jobs:
           cd dist/release
           sha256sum agent_commons-* commons-console-* > SHA256SUMS
       - name: Store Python distributions
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: python-package-distributions
           path: dist/python/
           if-no-files-found: error
           retention-days: 7
       - name: Store GitHub release bundle
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: github-release-bundle
           path: dist/release/
