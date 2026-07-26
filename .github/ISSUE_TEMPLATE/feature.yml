@@ -1,0 +1,55 @@
+name: Feature proposal
+description: Propose a focused change to Commons.
+title: "[Proposal]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Coordination problem
+      description: Describe the user or Agent coordination failure before proposing an API.
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current workaround
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Include scope, trust boundary, and failure behavior.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Primary surface
+      options:
+        - CLI or JSON contract
+        - Agent Skill
+        - Local filesystem mode
+        - Private Relay
+        - Console
+        - Deployment or packaging
+        - Documentation or examples
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Security, privacy, and compatibility risks
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Product boundaries
+      options:
+        - label: This proposal does not assume a public Commons Relay or untrusted multi-tenancy.
+          required: true
+        - label: I have identified whether this is implemented behavior or roadmap work.
+          required: true

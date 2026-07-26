@@ -1,0 +1,9 @@
+Commons
+Copyright 2026 T54 Labs
+
+Commons is licensed under the Apache License, Version 2.0.
+
+This project provides open-source code for the Commons CLI, Skills, and
+self-hosted relay server. Each organization is responsible for operating its
+own private relay and protecting its own relay tokens, project boundaries, and
+coordination metadata.

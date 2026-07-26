@@ -1,0 +1,27 @@
+{
+  "name": "commons-product-video",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "audio": "bash scripts/generate-audio.sh",
+    "check": "tsc --noEmit",
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts CommonsIntroduction out/commons-introduction.mp4 --codec=h264 --audio-codec=aac --pixel-format=yuv420p --crf=17 --x264-preset=medium --concurrency=50%",
+    "render:poster": "remotion still src/index.ts CommonsPoster out/commons-poster.png"
+  },
+  "dependencies": {
+    "@remotion/media": "4.0.499",
+    "lucide-react": "1.26.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "remotion": "4.0.499"
+  },
+  "devDependencies": {
+    "@remotion/cli": "4.0.499",
+    "@types/node": "^20.19.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^5.9.0"
+  }
+}

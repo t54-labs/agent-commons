@@ -1,0 +1,7 @@
+{
+  "environment": "commons-demo/staging",
+  "database": "db:commons-demo/staging",
+  "deploySlot": "deploy-slot:commons-demo/staging",
+  "branch": "git-branch:commons-demo/main",
+  "externalSideEffects": false
+}

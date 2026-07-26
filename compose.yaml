@@ -1,0 +1,38 @@
+name: commons
+
+services:
+  relay:
+    build:
+      context: .
+      target: relay
+    environment:
+      COMMONS_RELAY_TOKEN: ${COMMONS_RELAY_TOKEN:?Set COMMONS_RELAY_TOKEN before starting Commons}
+      COMMONS_CONSOLE_TOKEN: ${COMMONS_CONSOLE_TOKEN:-}
+      COMMONS_WORKSPACE_NAME: ${COMMONS_WORKSPACE_NAME:-Commons Team}
+    volumes:
+      - commons-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8766/health', timeout=2)
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  console:
+    build:
+      context: .
+      target: console
+    depends_on:
+      relay:
+        condition: service_healthy
+    ports:
+      - "${COMMONS_BIND:-127.0.0.1}:${COMMONS_PORT:-8766}:8080"
+    restart: unless-stopped
+
+volumes:
+  commons-data:

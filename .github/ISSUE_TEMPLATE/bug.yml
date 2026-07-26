@@ -1,0 +1,65 @@
+name: Bug report
+description: Report a reproducible Commons defect.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include Relay tokens, credentials, private prompts, raw transcripts, or customer data.
+  - type: input
+    id: version
+    attributes:
+      label: Commons version
+      description: Output from `commons version` or the commit SHA.
+      placeholder: 0.3.0
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Coordination mode
+      options:
+        - Remote private Relay
+        - Local filesystem
+        - Disabled or scope resolution
+        - Console
+        - Installer or packaging
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Agent runtime and operating system
+      placeholder: Codex on macOS 15; Claude Code on Ubuntu 24.04
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include commands with tokens and private identifiers removed.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and sanitized evidence
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I removed tokens, credentials, private paths, prompts, and customer data.
+          required: true
+        - label: I checked for an existing issue describing the same behavior.
+          required: true

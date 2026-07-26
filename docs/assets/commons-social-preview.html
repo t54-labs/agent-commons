@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Commons social preview</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 1280px;
+        height: 640px;
+        margin: 0;
+        overflow: hidden;
+        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #062f31;
+        background: #e6f5f4;
+      }
+
+      .poster {
+        position: relative;
+        display: grid;
+        grid-template-columns: 430px 1fr;
+        gap: 44px;
+        width: 100%;
+        height: 100%;
+        padding: 54px 50px 52px 58px;
+      }
+
+      .poster::after {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        height: 14px;
+        content: "";
+        background: #ffc928;
+      }
+
+      .copy {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 52px;
+        color: #0b6e69;
+        font-size: 15px;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .brand-mark {
+        display: grid;
+        grid-template-columns: repeat(2, 9px);
+        grid-template-rows: repeat(2, 9px);
+        gap: 3px;
+        width: 21px;
+        height: 21px;
+      }
+
+      .brand-mark span {
+        background: #0b6e69;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 82px;
+        font-weight: 850;
+        line-height: 0.92;
+        letter-spacing: 0;
+      }
+
+      .tagline {
+        max-width: 410px;
+        margin: 26px 0 0;
+        font-size: 31px;
+        font-weight: 760;
+        line-height: 1.13;
+        letter-spacing: 0;
+      }
+
+      .summary {
+        max-width: 400px;
+        margin: 22px 0 0;
+        color: #3f6667;
+        font-size: 18px;
+        line-height: 1.45;
+      }
+
+      .runtimes {
+        display: flex;
+        gap: 18px;
+        margin-top: auto;
+        color: #0b6e69;
+        font-size: 14px;
+        font-weight: 760;
+      }
+
+      .runtimes span + span::before {
+        margin-right: 18px;
+        content: "/";
+        color: #75aaa6;
+      }
+
+      .product {
+        position: relative;
+        align-self: center;
+        height: 500px;
+        border: 1px solid #76aaa7;
+        border-radius: 4px;
+        background: #ffffff;
+        box-shadow: 20px 24px 0 #b7ddda;
+        overflow: hidden;
+      }
+
+      .product img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: left top;
+      }
+
+      .proof {
+        position: absolute;
+        right: 22px;
+        bottom: 18px;
+        padding: 11px 14px;
+        border-left: 5px solid #ffc928;
+        background: rgba(255, 255, 255, 0.94);
+        color: #062f31;
+        font-size: 13px;
+        font-weight: 800;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="poster">
+      <section class="copy">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+          <span>T54 Labs / Open Source</span>
+        </div>
+        <h1>Commons</h1>
+        <p class="tagline">The shared control plane for coding agents.</p>
+        <p class="summary">Plans, messages, tasks, and fenced resource leases across sessions, repositories, and machines.</p>
+        <div class="runtimes"><span>Codex</span><span>Claude Code</span><span>CLI agents</span></div>
+      </section>
+      <section class="product" aria-label="Commons Console product view">
+        <img src="commons-console-overview.png" alt="Commons Console Workspace overview" />
+        <div class="proof">Private. Self-hosted. No MCP required.</div>
+      </section>
+    </main>
+  </body>
+</html>
