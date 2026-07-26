@@ -7,7 +7,7 @@ RUN npm ci
 COPY web/ ./
 RUN npm run build
 
-FROM python:3.11-slim AS relay
+FROM python:3.14-slim AS relay
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     COMMONS_HOME=/data/.commons \
