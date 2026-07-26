@@ -13,24 +13,71 @@ Commons is scope-first. A workspace must be explicitly enrolled before an agent 
 
 ## CLI Resolution
 
-Before any Commons command, resolve the CLI once:
+The supported bootstrap is the `agent-commons` package from PyPI. The package
+installs the `commons` command and carries this Skill for both Codex and Claude
+Code. A source checkout is only required for contributors.
+
+Never install or upgrade software without the user's approval. If Commons is
+missing, pause Commons-gated work and ask the user to run:
 
 ```bash
-COMMONS_BIN="${COMMONS_BIN:-${COMMONS_HOME:-$HOME/.commons}/bin/commons}"
-if [ ! -x "$COMMONS_BIN" ]; then
-  if command -v commons >/dev/null 2>&1; then
-    COMMONS_BIN="$(command -v commons)"
-  else
-    echo "Commons CLI not found. Ask the user to run: python3 -m commons.cli doctor --fix" >&2
-    exit 127
-  fi
+pipx install agent-commons==0.3.0
+commons install-skill --target both --scope user
+commons doctor --json
+```
+
+If `pipx` is unavailable, direct the user to the platform-specific pipx
+installation instructions linked from the Commons Getting Started guide. Do
+not fall back to `pip install` into the system Python, clone the repository, or
+search the filesystem for a source checkout.
+
+Before any Commons command, resolve the CLI once. Prefer the command on `PATH`
+and use the stable Commons shim as a fallback:
+
+```bash
+if [ -n "${COMMONS_BIN:-}" ] && [ -x "$COMMONS_BIN" ]; then
+  :
+elif command -v commons >/dev/null 2>&1; then
+  COMMONS_BIN="$(command -v commons)"
+elif [ -x "${COMMONS_HOME:-$HOME/.commons}/bin/commons" ]; then
+  COMMONS_BIN="${COMMONS_HOME:-$HOME/.commons}/bin/commons"
+else
+  cat >&2 <<'EOF'
+Commons CLI not found.
+
+Ask the user to install the verified release and its global Agent Skill:
+  pipx install agent-commons==0.3.0
+  commons install-skill --target both --scope user
+  commons doctor --json
+EOF
+  exit 127
+fi
+
+COMMONS_VERSION_JSON="$("$COMMONS_BIN" version --json)"
+if ! printf '%s' "$COMMONS_VERSION_JSON" | python3 -c '
+import json, re, sys
+version = str(json.load(sys.stdin).get("version", ""))
+match = re.match(r"^(\d+)\.(\d+)\.(\d+)", version)
+raise SystemExit(0 if match and tuple(map(int, match.groups())) >= (0, 3, 0) else 1)
+'; then
+  cat >&2 <<'EOF'
+Commons 0.3.0 or newer is required.
+
+Ask the user to upgrade the PyPI package, refresh both global Skills, and then
+restart this Agent session:
+  pipx upgrade agent-commons
+  commons install-skill --target both --scope user
+  commons doctor --json
+EOF
+  exit 2
 fi
 ```
 
 Use `"$COMMONS_BIN"` for every Commons command in the session.
 
 Do not search the whole filesystem for the CLI, do not run source files such as
-`commons/cli.py` directly, and do not write `~/.commons/board` files by hand.
+`commons/cli.py` directly, do not invoke `python -m commons.cli` as an
+installation substitute, and do not write `~/.commons/board` files by hand.
 
 ## Required Session Start
 

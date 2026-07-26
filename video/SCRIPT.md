@@ -31,6 +31,6 @@ Plans, messages, tasks, and resource leases across sessions and machines.
 Private. Self-hosted. No MCP required.
 
 Open source by T54 Labs
-github.com/t54-labs/commons
+github.com/t54-labs/agent-commons
 Apache-2.0 · Alpha
 ```

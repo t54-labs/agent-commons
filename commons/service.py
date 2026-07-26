@@ -17,7 +17,7 @@ from typing import Any
 from . import __version__
 from . import board
 from .db import connect, init_db, transaction
-from .paths import artifact_dir, bin_dir, config_path, db_path, ensure_base_dirs, runtime_tests_dir
+from .paths import artifact_dir, bin_dir, board_dir, config_path, db_path, ensure_base_dirs, runtime_tests_dir
 from .util import (
     current_pid,
     hash_event,
@@ -148,16 +148,23 @@ def install_skill(target: str = "both", scope: str = "user", project_dir: str | 
 
 
 def doctor(fix: bool = False, project_dir: str | None = None) -> dict[str, Any]:
+    project = Path(project_dir or os.getcwd()).resolve()
+    from . import scope as scope_config
+
+    resolved_scope = scope_config.resolve(str(project))
+    local_state_required = resolved_scope["mode"] == "local"
     repaired: list[str] = []
-    initialize()
     if fix:
+        initialize()
         sync_board()
         shim = install_cli_shim()
         repaired.append("initialized local state and synchronized filesystem board")
         repaired.append(f"installed Commons CLI shim at {shim['path']}")
+    elif local_state_required:
+        initialize()
+        board.ensure_board()
 
-    project = Path(project_dir or os.getcwd()).resolve()
-    board_root = board.ensure_board()
+    board_root = board_dir()
     board_subdirs = {name: (board_root / name).is_dir() for name in board.BOARD_SUBDIRS}
     missing_board_dirs = [name for name, exists in board_subdirs.items() if not exists]
 
@@ -212,10 +219,19 @@ def doctor(fix: bool = False, project_dir: str | None = None) -> dict[str, Any]:
         "shim_exists": shim.exists(),
         "recommended": str(shim) if shim.exists() else cli_path,
     }
-    status_snapshot = current_status()
+    status_snapshot = (
+        current_status()
+        if db_path().exists()
+        else {
+            "agents": [],
+            "tasks": [],
+            "active_leases": [],
+            "unread_messages": [],
+        }
+    )
     errors: list[str] = []
     warnings: list[str] = []
-    if missing_board_dirs:
+    if local_state_required and missing_board_dirs:
         errors.append(f"missing board directories: {', '.join(missing_board_dirs)}")
     for runtime, check in runtime_checks.items():
         if not check["available"]:
@@ -242,11 +258,13 @@ def doctor(fix: bool = False, project_dir: str | None = None) -> dict[str, Any]:
         "ok": not errors,
         "mode": "filesystem-first",
         "mcp_required": False,
+        "scope": resolved_scope,
         "config": str(config_path()),
         "db": {"path": str(db_path()), "exists": db_path().exists()},
         "board": {
             "path": str(board_root),
             "exists": board_root.exists(),
+            "required": local_state_required,
             "subdirs": board_subdirs,
             "status_file_exists": (board_root / "status.json").exists(),
         },

@@ -8,6 +8,32 @@ for public releases.
 
 ## [Unreleased]
 
+### Changed
+
+- The Agent Skill now treats the versioned `agent-commons` PyPI package as the
+  only supported end-user bootstrap, checks for Commons 0.3.0 or newer, and
+  gives actionable install or upgrade instructions without searching for a
+  source checkout.
+- The repository installer now defaults to the verified 0.3.0 PyPI release;
+  contributors must opt into a checkout with `--source .`.
+- Onboarding now separates the one-time PyPI client install, conversational
+  workspace enrollment, private Team Relay administration, and contributor
+  source setup.
+- Release automation now builds Python distributions once and publishes those
+  exact artifacts to GitHub Releases and PyPI through OIDC Trusted Publishing.
+- Public-source preparation now generates a two-commit repository from reviewed
+  release and development trees, with tree-identity and publication-hygiene
+  gates instead of exposing or rewriting private Git history.
+- Public visual and audio assets now have an explicit provenance record; the
+  Console architecture image is a project-specific generated asset with no
+  external reference image.
+
+### Fixed
+
+- Installing the Skill and running a normal diagnostic no longer create a
+  local filesystem board for unknown, remote, or disabled workspaces. Local
+  state is initialized only for local scope or an explicit `doctor --fix`.
+
 ## [0.3.0] - 2026-07-25
 
 ### Added
@@ -42,8 +68,8 @@ for public releases.
 - Loopback health and Relay requests now bypass system proxies, with bounded startup cleanup and diagnostics.
 - Daemon and Relay startup now avoid blocking reverse-DNS lookups during HTTP socket binding.
 
-Formal changelog tracking begins with `0.3.0`; earlier development history is
-available in Git.
+Formal public changelog and source history begin with `0.3.0`. Earlier private
+development history is intentionally excluded from the public repository.
 
-[Unreleased]: https://github.com/t54-labs/commons/commits/main
-[0.3.0]: https://github.com/t54-labs/commons/releases/tag/v0.3.0
+[Unreleased]: https://github.com/t54-labs/agent-commons/commits/main
+[0.3.0]: https://github.com/t54-labs/agent-commons/releases/tag/v0.3.0

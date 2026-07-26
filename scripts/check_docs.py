@@ -21,14 +21,15 @@ def markdown_files() -> list[Path]:
     files = [
         ROOT / "README.md",
         ROOT / "PYPI.md",
+        ROOT / "CHANGELOG.md",
         ROOT / "CONTRIBUTING.md",
         ROOT / "SECURITY.md",
         ROOT / "GOVERNANCE.md",
         ROOT / "CODE_OF_CONDUCT.md",
     ]
-    files.extend(sorted((ROOT / "docs").rglob("*.md")))
-    files.extend(sorted((ROOT / "examples").rglob("*.md")))
-    files.extend(sorted((ROOT / ".agents" / "skills").rglob("*.md")))
+    for directory in (".github", ".agents/skills", "docs", "examples", "video"):
+        files.extend(sorted((ROOT / directory).rglob("*.md")))
+    files = [path for path in files if "node_modules" not in path.parts]
     return [path for path in files if path.exists()]
 
 

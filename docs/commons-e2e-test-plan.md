@@ -454,7 +454,11 @@ commons test e2e --scenario prompt-injection-message --agents codex,claude-code
 commons test e2e --scenario all --agents codex,claude-code
 ```
 
-These deterministic scenarios use fake agent sessions with runtime labels. Real Codex and Claude Code smoke tests run later when those CLIs are available and authenticated.
+These deterministic scenarios use fake Agent sessions with runtime labels. The
+implemented runtime harness prepares and verifies separate real Codex and
+Claude Code sessions when those CLIs are installed and authenticated. Real
+runtime evidence is a release-time or manual gate, not a claim made by the
+deterministic CI scenarios.
 
 ## Release Acceptance Matrix
 

@@ -1,9 +1,9 @@
 # Release Checklist
 
-Use this checklist for PyPI releases and a later public repository launch.
-Public-repository, anonymous-clone, and campaign gates apply only when the
-repository visibility changes; they do not block a PyPI package release from a
-private repository. Record evidence next to each completed gate.
+Use this checklist for the initial `t54-labs/agent-commons` source publication
+and every later PyPI/GitHub release. The private bootstrap release is complete;
+future releases originate from the public repository. Record evidence next to
+each completed gate.
 
 ## Release Identity
 
@@ -19,6 +19,7 @@ private repository. Record evidence next to each completed gate.
 - [ ] `make docs-check` passes.
 - [ ] `npm --prefix web run build` passes.
 - [ ] `npm --prefix web run test:e2e` passes on desktop and mobile Chromium.
+- [ ] `npm --prefix video run check` passes for the Remotion product-video source.
 - [ ] `make demo` passes all deterministic scenarios.
 - [ ] Python sdist and wheel build without warnings.
 - [ ] `python -m twine check dist/*` passes.
@@ -34,6 +35,7 @@ private repository. Record evidence next to each completed gate.
 - [ ] No secrets, tokens, credentials, private prompts, raw transcripts, customer data, or browser cookies are present.
 - [ ] No personal absolute paths, private hostnames, IP addresses, projects, Agents, or messages are present.
 - [ ] Console screenshots and videos use only fixture data.
+- [ ] Every public image and audio file has a documented source or generation path in `docs/assets/README.md`.
 - [ ] Relay token files and examples use `0600` guidance.
 - [ ] Scope-first `remote`, `local`, and `disabled` behavior is documented.
 - [ ] Public Relay and untrusted multi-tenant operation remain explicit non-goals.
@@ -50,10 +52,17 @@ private repository. Record evidence next to each completed gate.
 - [ ] Dependency lockfiles are committed.
 - [ ] Dependabot configuration is enabled and initial alerts are reviewed.
 - [ ] Release artifacts contain no private or generated test state.
-- [ ] Wheel, sdist, and Console artifacts have verifiable GitHub build-provenance attestations.
+- [ ] Wheel, sdist, and Console artifacts have verifiable SHA-256 checksums.
+- [ ] Public-repository release artifacts also have verifiable GitHub build-provenance attestations.
 
 ## Documentation and Developer Experience for a Public Repository Launch
 
+- [ ] The public candidate was generated with `scripts/create_public_history.sh`, not by copying or rewriting the private `.git` directory.
+- [ ] The public `v0.3.0` and development tree IDs match their reviewed private source trees.
+- [ ] The public candidate has exactly two reachable commits and no remote before review.
+- [ ] Repository Actions are disabled only for the reconstructed `v0.3.0` tag push, restored immediately, and verified before `main` is pushed.
+- [ ] No historical release workflow rebuilds or republishes the preserved bootstrap assets.
+- [ ] `make public-check` and an independent secret scanner pass on the candidate and both public commits.
 - [ ] Anonymous clone works from a clean machine or container.
 - [ ] `./scripts/install.sh --source .` installs Codex and Claude Skills in an isolated HOME.
 - [ ] README local links and images render on GitHub.
@@ -68,8 +77,8 @@ private repository. Record evidence next to each completed gate.
 - [ ] Repository description is set.
 - [ ] Topics include Agent coordination, Codex, Claude Code, self-hosting, and distributed systems.
 - [ ] Wiki is disabled so repository docs remain canonical.
-- [ ] Discussions are enabled with `Ideas`, `Q&A`, and `Show and tell` categories.
-- [ ] Private vulnerability reporting is enabled before the repository becomes public.
+- [ ] Discussions are enabled with `Ideas`, `Q&A`, and `Show and tell` categories once moderation ownership is assigned.
+- [ ] Private vulnerability reporting is enabled before source is pushed or launch traffic is directed to the repository.
 - [ ] Branch protection requires CI and review on `main`.
 - [ ] Social preview uses `docs/assets/commons-social-preview.png`.
 - [ ] The homepage does not point to the private T54 Labs Console.
@@ -77,12 +86,16 @@ private repository. Record evidence next to each completed gate.
 
 ## PyPI Publication
 
-- [ ] `agent-commons` is still unregistered immediately before first publication.
-- [ ] The PyPI account owner and token scope are verified before upload.
-- [ ] Local token configuration is mode `0600` and never appears in arguments, logs, commits, or GitHub secrets.
+- [ ] The `agent-commons` project owner and release owner are verified.
+- [ ] The PyPI Trusted Publisher matches owner `t54-labs`, repository `agent-commons`, workflow `release.yml`, and environment `pypi`.
+- [ ] The GitHub `pypi` environment requires maintainer approval.
+- [ ] No `PYPI_API_TOKEN`, password, or long-lived PyPI credential exists in GitHub settings or the workflow.
 - [ ] Wheel and sdist are built from the exact tagged commit and pass `twine check`.
+- [ ] `scripts/check_release_artifacts.py --tag v<version> --dist-dir <dir>` passes.
+- [ ] GitHub Release and PyPI consume the same stored wheel and sdist.
 - [ ] `pipx install agent-commons==<version>` succeeds from a clean environment after publication.
-- [ ] Configure OIDC Trusted Publishing after the bootstrap release, then retire the account-wide upload token.
+- [ ] PyPI hashes match the GitHub Release `SHA256SUMS` entries.
+- [ ] The bootstrap upload token is revoked after the first successful OIDC publication.
 
 ## Campaign Assets for a Public Repository Launch
 
@@ -94,22 +107,28 @@ private repository. Record evidence next to each completed gate.
 - [ ] T54 Labs essay, Hacker News comment, X thread, and LinkedIn copy are reviewed.
 - [ ] Launch-day responder and escalation owner are assigned.
 
-## PyPI Publication Order While the Repository Is Private
+## PyPI Publication Order
 
-1. Complete the applicable technical, privacy, licensing, and packaging gates.
+1. Complete every technical, privacy, licensing, packaging, and onboarding-pin gate.
 2. Freeze the target commit on `main`; align version, changelog, and annotated tag.
-3. Push the tag and wait for the release workflow and GitHub Release.
-4. Rebuild the Python distributions from the exact tag and run `twine check`.
-5. Confirm the name is still available, secure the local token file, and upload once.
-6. Verify the PyPI project, hashes, metadata, and a clean pinned `pipx` installation.
+3. Push the tag and wait for Python and product release gates.
+4. Verify the single build job passes `twine check` and artifact inspection.
+5. Verify the GitHub Release and `SHA256SUMS` bundle.
+6. Approve the protected `pypi` environment.
+7. Verify the OIDC publication, attestations, hashes, metadata, and a clean pinned pipx installation.
 
-## Later Public Repository Launch Order
+## Initial Public Repository Launch Order
 
-1. Complete every public-repository and campaign gate above.
-2. Make the repository public.
-3. Verify anonymous clone, README assets, issues, Discussions, and security reporting.
-4. Publish the T54 Labs essay and channel posts.
-5. Monitor issues and corrections for at least four hours.
+1. Keep the private `t54-labs/commons` repository unchanged and freeze its publication trees.
+2. Confirm the public `t54-labs/agent-commons` repository is empty.
+3. Generate and audit the clean two-commit public candidate.
+4. Disable Actions for the reconstructed `v0.3.0` tag-only push, restore and verify Actions, then push candidate `main` so current CI runs.
+5. Recreate the verified `v0.3.0` release assets without rebuilding them.
+6. Configure branch protection, secret scanning, push protection, private vulnerability reporting, and the protected `pypi` environment.
+7. Configure PyPI Trusted Publishing for `t54-labs/agent-commons`; never authorize the private repository.
+8. Verify anonymous clone, README assets, issues, security reporting, release assets, and the complete CI matrix.
+9. Publish the T54 Labs essay and channel posts.
+10. Monitor issues and corrections for at least four hours.
 
 ## Rollback
 

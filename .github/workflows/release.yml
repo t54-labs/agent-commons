@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -40,6 +42,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -69,19 +73,17 @@ jobs:
       - name: Build Console image
         run: docker build --target console --tag commons-console:release .
 
-  release:
-    name: Build and publish release
+  build:
+    name: Build release artifacts once
     needs:
       - python
       - product
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
-      attestations: write
     steps:
       - name: Check out repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -92,24 +94,84 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - name: Verify release tag
+      - name: Install release build tools
+        run: python -m pip install --upgrade build twine
+      - name: Verify release identity and onboarding pins
+        run: python scripts/check_release_artifacts.py --tag "$GITHUB_REF_NAME"
+      - name: Build Python distributions
+        run: python -m build --outdir dist/python
+      - name: Validate Python distributions
         run: |
-          package_version="$(python -c 'from commons import __version__; print(__version__)')"
-          test "$GITHUB_REF_NAME" = "v${package_version}"
-      - name: Build Python distribution
-        run: |
-          python -m pip install --upgrade build
-          python -m build
+          python -m twine check dist/python/*
+          python scripts/check_release_artifacts.py --tag "$GITHUB_REF_NAME" --dist-dir dist/python
       - name: Build Console artifact
         run: |
           npm --prefix web ci
           npm --prefix web run build
-          tar -C web/dist -czf "dist/commons-console-${GITHUB_REF_NAME}.tar.gz" .
-      - name: Attest release artifacts
+          mkdir -p dist/release
+          tar -C web/dist -czf "dist/release/commons-console-${GITHUB_REF_NAME}.tar.gz" .
+      - name: Assemble GitHub release bundle
+        run: |
+          cp dist/python/* dist/release/
+          cd dist/release
+          sha256sum agent_commons-* commons-console-* > SHA256SUMS
+      - name: Store Python distributions
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: python-package-distributions
+          path: dist/python/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Store GitHub release bundle
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: github-release-bundle
+          path: dist/release/
+          if-no-files-found: error
+          retention-days: 7
+
+  github-release:
+    name: Publish GitHub release
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download GitHub release bundle
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: github-release-bundle
+          path: dist/release
+      - name: Attest public release artifacts
+        if: ${{ github.event.repository.private == false }}
         uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4
         with:
-          subject-path: dist/*
+          subject-path: dist/release/*
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes --verify-tag
+        run: gh release create "$GITHUB_REF_NAME" dist/release/* --generate-notes --verify-tag
+
+  pypi:
+    name: Publish Python distributions to PyPI
+    needs:
+      - github-release
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/agent-commons
+    permissions:
+      id-token: write
+    steps:
+      - name: Download Python distributions
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: python-package-distributions
+          path: dist
+      - name: Publish distributions with PyPI Trusted Publishing
+        uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # release/v1
+        with:
+          packages-dir: dist/

@@ -14,6 +14,16 @@ The open-source distribution includes:
 Each team, company, or developer is expected to operate its own relay when
 cross-machine coordination is needed.
 
+Client installation is independent of the Relay source checkout:
+
+```bash
+pipx install agent-commons==0.3.0
+commons install-skill --target both --scope user
+```
+
+The Relay operator then distributes the private URL, project ID, and credential
+through the process in [Team Onboarding](team-onboarding.md).
+
 ## Local Private Relay Quick Start
 
 The repository includes a two-service Docker Compose stack: a non-root Python

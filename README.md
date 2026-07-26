@@ -4,7 +4,8 @@
   <p><strong>The shared control plane for coding agents.</strong></p>
   <p>Coordinate Codex, Claude Code, and other independently started agents across sessions, repositories, machines, and shared infrastructure.</p>
   <p>
-    <a href="https://github.com/t54-labs/commons/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/t54-labs/commons/actions/workflows/ci.yml/badge.svg"></a>
+    <a href="https://github.com/t54-labs/agent-commons/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/t54-labs/agent-commons/actions/workflows/ci.yml/badge.svg"></a>
+    <a href="https://pypi.org/project/agent-commons/"><img alt="PyPI" src="https://img.shields.io/pypi/v/agent-commons?label=PyPI&color=0B6E69"></a>
     <a href="LICENSE"><img alt="Apache 2.0" src="https://img.shields.io/badge/license-Apache--2.0-0B6E69"></a>
     <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-FFC928">
     <img alt="No MCP required" src="https://img.shields.io/badge/MCP-not%20required-CDE4F8">
@@ -52,20 +53,44 @@ fits alongside runtime-native agent teams, Git worktrees, MCP, and A2A.
 ### 1. Install the CLI and Skill
 
 The CLI currently supports macOS and Linux with Python 3.11 or newer. Install
-[`pipx`](https://pipx.pypa.io/stable/installation/) first so the command-line
+[`pipx`](https://pipx.pypa.io/latest/how-to/install-pipx.html) first so the command-line
 tool stays isolated from the system Python. Windows support is not yet part of
 the verified installation matrix.
 
 ```bash
-pipx install agent-commons
+pipx install agent-commons==0.3.0
 commons install-skill --target both --scope user
 commons doctor --json
 ```
 
-The installer puts the Commons Skill in the user-level Codex and Claude Code
-Skill directories. It does **not** enroll every repository into a network.
+The package installs the `commons` CLI. The second command installs the bundled
+Skill in `~/.codex/skills/commons` and `~/.claude/skills/commons`. It does
+**not** enroll any repository, connect to a Relay, or select local mode.
 
-### 2. Run the deterministic coordination suite
+Start a fresh Codex or Claude Code session after installation. Normal use is
+conversational; you do not need to drive the coordination lifecycle by hand.
+
+### 2. Tell the Agent how this workspace should participate
+
+Use one of these prompts in the repository where the Agent will work:
+
+```text
+Use Commons here. This workspace is local only.
+```
+
+```text
+Use the configured team Relay for this workspace and project example-app.
+```
+
+```text
+Disable Commons in this workspace.
+```
+
+If you say nothing, the Skill resolves the workspace first and asks before it
+registers or shares anything. In remote mode, the Agent reports its handle and
+contact code before starting substantial work.
+
+### 3. Run the deterministic coordination suite
 
 ```bash
 COMMONS_HOME="$(mktemp -d)" \
@@ -75,7 +100,7 @@ COMMONS_HOME="$(mktemp -d)" \
 This exercises contention, handoff, branch coordination, browser ownership,
 message safety, and a full golden path without touching real infrastructure.
 
-### 3. Enroll a workspace
+### 4. Enroll a workspace manually when scripting
 
 ```bash
 # Same-machine coordination with no server
@@ -85,12 +110,11 @@ commons scope enroll --workspace "$PWD" --mode local --scope personal
 commons scope enroll --workspace "$PWD" --mode disabled
 ```
 
-For normal Agent use, you can say this conversationally: "Use Commons here;
-this is local only" or "Disable Commons for this project." The Skill resolves
-scope before registration or coordination.
+These CLI commands are the scriptable backend for the conversational flow.
 
-See the [Getting Started guide](docs/getting-started.md) for remote Team setup,
-Agent registration, and a first coordinated task.
+See [Getting Started](docs/getting-started.md) for the complete user flow and
+[Team Onboarding](docs/team-onboarding.md) for Relay administration, private
+credential delivery, and project enrollment.
 
 ## Private Relay and Console
 
@@ -183,9 +207,10 @@ evidence and acceptance discipline used to build this repository.
 
 ## Project Status
 
-Commons is currently an **alpha** project. This source tree carries version
-`0.3.0`. The implemented
-surface includes local and remote coordination, scope-first enrollment, remote
+Commons is currently an **alpha** project. The latest published release is
+[`agent-commons 0.3.0`](https://pypi.org/project/agent-commons/0.3.0/); `main`
+is the `0.3.1.dev0` development line. The implemented surface includes local
+and remote coordination, scope-first enrollment, remote
 tasks and messages, fenced leases, deterministic E2E scenarios, runtime smoke
 harnesses, and the operator Console.
 
@@ -198,6 +223,7 @@ and release gates are explicit in the [Roadmap](docs/commons-roadmap.md).
 Start with the [Documentation Map](docs/README.md).
 
 - [Getting Started](docs/getting-started.md)
+- [Team Onboarding](docs/team-onboarding.md)
 - [Why Commons](docs/why-commons.md)
 - [Architecture](docs/architecture.md)
 - [Self-Hosting Model](docs/open-source-self-hosting.md)

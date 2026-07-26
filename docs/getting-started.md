@@ -1,250 +1,228 @@
 # Getting Started
 
-This guide takes a new developer from clone to a verified local installation,
-then explains how to choose local, remote, or disabled workspace scope.
+This guide is for a developer who wants Codex, Claude Code, or both to use
+Commons. End users install the published Python package; they do not clone the
+repository or run the CLI from source.
+
+The setup has two layers:
+
+1. Install the CLI and global Agent Skill once per machine.
+2. Choose `remote`, `local`, or `disabled` separately for each workspace.
+
+After those one-time steps, normal use is conversational. The Skill drives the
+CLI lifecycle on the Agent's behalf.
 
 ## Requirements
 
 - Python 3.11 or newer
-- macOS or Linux; the Bash installer is not yet supported on Windows
-- `pipx` for the recommended PyPI installation
-- Git only when installing from source
-- Codex, Claude Code, or another CLI Agent if you want runtime integration
-- Docker Compose only if you want the fastest private Relay and Console setup
+- macOS or Linux
+- [`pipx`](https://pipx.pypa.io/latest/how-to/install-pipx.html)
+- Codex, Claude Code, or another CLI Agent
 
-Commons has no mandatory Python runtime dependencies outside the standard
-library. MCP is not required.
+Windows is not yet in the verified installation matrix. Commons has no
+mandatory Python runtime dependencies outside the standard library. MCP is not
+required.
 
-## Install from PyPI
+## 1. Install Commons Once
 
-```bash
-pipx install agent-commons
-commons install-skill --target both --scope user
-```
-
-`agent-commons` is the PyPI distribution name. The installed Python package and
-CLI command are both named `commons`. The second command installs the packaged
-Commons Skill for Codex and Claude Code at user scope; installation alone does
-not enroll any repository into a network.
-
-Install a release pinned for a team or reproducible environment:
+Install the verified release in an isolated environment:
 
 ```bash
 pipx install agent-commons==0.3.0
-```
-
-Verify the installation:
-
-```bash
-commons version
+commons install-skill --target both --scope user
 commons doctor --json
 ```
 
-`doctor` reports CLI, Skill, runtime, and local state health. A missing Codex or
-Claude executable is a warning when that runtime is not installed.
+If `commons` is not found immediately after the first command, run
+`pipx ensurepath`, open a new shell, and retry. Do not install Commons into the
+system Python with `sudo pip`.
 
-## Install from Source
+The distribution is named `agent-commons`. It installs:
 
-Contributors and maintainers can install a checkout instead:
+- the `commons` and `commonsd` commands through pipx
+- the Codex Skill at `~/.codex/skills/commons/SKILL.md`
+- the Claude Code Skill at `~/.claude/skills/commons/SKILL.md`
+- a stable fallback command at `~/.commons/bin/commons`
 
-```bash
-git clone https://github.com/t54-labs/commons.git
-cd commons
-./scripts/install.sh --source .
-export PATH="$HOME/.commons/bin:$PATH"
-```
+The installation does not enroll a workspace or connect to a Relay. Version
+0.3.0 may initialize an empty local diagnostic directory during `doctor`; that
+does not select local mode or make project context visible. The next patch line
+removes that incidental directory creation for remote and disabled workspaces.
 
-The source installer creates an isolated virtual environment under `~/.commons`,
-installs the CLI, creates the stable `~/.commons/bin/commons` entrypoint, and
-installs the Commons Skill for Codex and Claude Code at user scope.
-
-Install for only one runtime:
+Verify the package and Skill:
 
 ```bash
-./scripts/install.sh --source . --target codex
-./scripts/install.sh --source . --target claude
+commons version --json
+commons doctor --json
 ```
 
-## Choose Workspace Scope
+Expected evidence includes version `0.3.0`, `ok: true`, and user-level Skill
+entries for the runtimes you installed. A missing `codex` or `claude`
+executable is a warning when that runtime is not installed on the machine.
 
-Installing the Skill does not enroll repositories. Resolve the current choice:
+## 2. Start a Fresh Agent Session
 
-```bash
-commons scope resolve --workspace "$PWD" --json
-```
+Codex and Claude Code discover global Skills when a session starts. Open a new
+session in the repository where the Agent will work.
 
-### Local Mode
+The Agent first resolves workspace scope. If the workspace has never been
+enrolled, it must ask before registering, broadcasting, reading a Commons
+inbox, or acquiring a resource lease.
 
-Use local mode for same-machine coordination without a server:
+Choose one of three modes.
 
-```bash
-commons scope enroll --workspace "$PWD" --mode local --scope personal
-```
+### Local-only
 
-Local state lives under `~/.commons` by default. Set `COMMONS_HOME` to isolate a
-demo or test run.
-
-### Disabled Mode
-
-Use disabled mode for repositories that should not participate:
-
-```bash
-commons scope enroll --workspace "$PWD" --mode disabled
-```
-
-The Skill must not register, broadcast, read inboxes, or acquire leases in a
-disabled workspace.
-
-### Remote Team Mode
-
-Start a local private Relay and Console:
-
-```bash
-export COMMONS_RELAY_TOKEN="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
-export COMMONS_WORKSPACE_NAME="My Team"
-docker compose up --build -d
-```
-
-The default Compose binding is `127.0.0.1:8766`. Open:
+Say:
 
 ```text
-http://127.0.0.1:8766/app/
+Use Commons here. This workspace is local only.
 ```
 
-Enter the same Relay token in the Console. Configure the CLI without embedding
-the token in `remotes.json`:
+The Agent enrolls the repository in local mode and coordinates with other
+Agents on the same machine through the local Board. It does not contact a
+Relay.
 
-```bash
-mkdir -p ~/.commons/relay
-printf '%s\n' "$COMMONS_RELAY_TOKEN" > ~/.commons/relay/team.token
-chmod 600 ~/.commons/relay/team.token
+### Private Team Relay
 
-commons remote add team \
-  --url http://127.0.0.1:8766 \
-  --token-file ~/.commons/relay/team.token \
-  --project example-app
+After a team operator has configured a named Relay on your machine, say:
 
-commons remote status --remote team --project example-app --json
-commons scope enroll \
-  --workspace "$PWD" \
-  --mode remote \
-  --remote team \
-  --project example-app \
-  --scope work
+```text
+Use the configured team Relay for this workspace and project example-app.
 ```
 
-For cross-machine use, terminate HTTPS in front of the Relay and do not expose
-the example HTTP binding directly to an untrusted network. See the
-[self-hosting model](open-source-self-hosting.md) and
-[deployment runbook](commons-relay-deployment-runbook.md).
+The Agent enrolls the repository in remote mode, verifies the Relay, registers
+a new session identity, and reports output similar to:
 
-## First Remote Agent
-
-The installed Skill performs this lifecycle automatically at session start.
-The equivalent CLI flow is useful for verification:
-
-```bash
-commons remote agent register \
-  --remote team \
-  --project example-app \
-  --runtime codex \
-  --workspace "$(basename "$PWD")" \
-  --handle codex-main \
-  --contact-code A7K2Q9 \
-  --json
+```text
+Commons identity: @codex-example-app / A7K2Q9
+Commons scope: remote, relay=team, project=example-app
 ```
 
-Save the returned `agent_id`. Then inspect peers, inbox, and leases:
+The handle and contact code are addresses within that private Relay project.
+They are not public or globally unique across independent Relay servers.
 
-```bash
-commons remote agent list --remote team --project example-app
-commons remote inbox --remote team --project example-app --agent <agent-id> --unread-only
-commons remote lease list --remote team --project example-app --active
+See [Team Onboarding](team-onboarding.md) for the operator and teammate setup.
+
+### Disabled
+
+Say:
+
+```text
+Disable Commons in this workspace.
 ```
 
-## First Coordinated Operation
+The Agent records the choice and must not register, broadcast, read inboxes, or
+acquire Commons leases for that workspace.
 
-Create a task, announce intent, and acquire the resource before the side effect:
+If the answer is ambiguous, the Agent must leave the workspace unenrolled for
+the current task. Installing a global Skill is never consent to join a team
+network.
 
-```bash
-commons remote task create "Deploy candidate" \
-  --remote team \
-  --project example-app \
-  --owner <agent-id> \
-  --current-step "Inspect current deployment" \
-  --next-step "Acquire deployment slot" \
-  --progress 10
+## 3. Let the Skill Coordinate Normal Work
 
-commons remote msg broadcast \
-  "PLAN: inspect staging, acquire the deployment slot, deploy, then publish smoke evidence." \
-  --remote team \
-  --project example-app \
-  --sender <agent-id> \
-  --type plan
+For an enrolled workspace, an Agent follows this lifecycle before substantial
+shared work:
 
-commons remote lease acquire deploy-slot:example-app/staging \
-  --remote team \
-  --project example-app \
-  --mode exclusive \
-  --agent <agent-id> \
-  --ttl 30m \
-  --reason "Deploy candidate"
+```text
+resolve scope -> register -> report identity -> check inbox and leases
+-> publish task and plan -> acquire shared-resource leases -> execute
+-> report evidence -> acknowledge or hand off -> release -> go offline
 ```
 
-Save both `lease_id` and `fencing_epoch`. Release requires the exact holder and
-epoch:
+You can ask the Agent naturally:
 
-```bash
-commons remote lease release <lease-id> \
-  --remote team \
-  --project example-app \
-  --agent <agent-id> \
-  --fencing-epoch <epoch>
+```text
+Before deploying staging, use Commons to check for conflicts and coordinate the deploy slot.
 ```
 
-## Deterministic Verification
+```text
+Send the Agent with contact code A7K2Q9 the commit, test evidence, and next step.
+```
 
-Run the built-in local scenarios in an isolated Commons home:
+```text
+Check Commons for messages and tell me whether another Agent owns this database migration.
+```
+
+The Agent should use the CLI itself. You should not need to copy identifiers or
+relay commands between Agent windows during normal work.
+
+## 4. Verify the Coordination Primitives
+
+The built-in deterministic suite runs entirely in an isolated temporary
+Commons home and does not touch real infrastructure:
 
 ```bash
 COMMONS_HOME="$(mktemp -d)" \
   commons --json test e2e --scenario all --agents codex,claude-code
 ```
 
-Run the Python suite from the repository:
+It covers contention, handoff, branch coordination, browser ownership, message
+safety, and a complete golden path.
+
+For a real multi-window demo, follow the
+[End-to-End Test Plan](commons-e2e-test-plan.md) or the
+[Multi-Agent Demo](../examples/multi-agent-demo/README.md).
+
+## Scripted Scope Commands
+
+Conversation is the normal interface. These commands are available for
+automation and troubleshooting:
 
 ```bash
-python3 -m unittest discover -s tests -v
+commons scope resolve --workspace "$PWD" --json
+
+commons scope enroll \
+  --workspace "$PWD" \
+  --mode local \
+  --scope personal
+
+commons scope enroll \
+  --workspace "$PWD" \
+  --mode disabled
 ```
 
-Build and test the Console:
+A remote enrollment also requires `--remote <alias>`, `--project <id>`, and an
+already configured Relay credential.
 
-```bash
-cd web
-npm ci
-npm run build
-npm run test:e2e
-```
+## Upgrade
 
-For real Codex and Claude Code sessions, use the runtime smoke harness described
-in the [End-to-End Test Plan](commons-e2e-test-plan.md).
-
-## Update or Remove
-
-Upgrade the PyPI installation, then refresh the bundled Skills:
+The CLI and Skill are versioned together. Upgrade both, then start fresh Agent
+sessions so they load the new Skill:
 
 ```bash
 pipx upgrade agent-commons
 commons install-skill --target both --scope user
+commons doctor --json
 ```
 
-For a source checkout, pull the desired commit and re-run the installer:
+Running `pipx upgrade` alone does not refresh files already copied into the
+Codex and Claude Code Skill directories.
+
+PyPI installation is independent of the source checkout. The canonical public
+source is `https://github.com/t54-labs/agent-commons`; changing a Git remote
+does not change the `pipx` command.
+
+## Remove or Disable
+
+To stop using Commons in one repository, disable only that workspace:
 
 ```bash
-./scripts/install.sh --source .
+commons scope enroll --workspace "$PWD" --mode disabled
 ```
 
-Before removing Commons, set relevant workspaces to `disabled`, stop any local
-Relay, and verify that no active leases remain. Then run
-`pipx uninstall agent-commons` for a PyPI installation. The source installer
-does not modify shell startup files automatically.
+Before removing Commons from a machine, finish or release active work, stop any
+local Relay, then run:
+
+```bash
+pipx uninstall agent-commons
+rm -rf ~/.codex/skills/commons ~/.claude/skills/commons
+```
+
+Do not delete Relay data or active lease records as part of a client uninstall.
+
+## Source Installation Is for Contributors
+
+Contributors and self-hosting operators may clone the public repository. They
+should follow [CONTRIBUTING.md](../CONTRIBUTING.md) rather than replacing the
+end-user PyPI path with an editable source install.

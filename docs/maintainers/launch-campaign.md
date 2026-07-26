@@ -197,11 +197,15 @@ End with:
 
 ### GitHub
 
-- Publish a tagged `v0.3.0` release only after every release checklist gate passes.
-- Set the repository description and topics before making it public.
+- Recreate the verified `v0.3.0` source tag and Release assets in the public
+  `t54-labs/agent-commons` repository after every source-publication gate passes.
+- Set the repository description and topics before the first source push and
+  public announcement.
 - Upload the social preview image in repository settings.
-- Enable Discussions with `Ideas`, `Show and tell`, and `Q&A` categories.
-- Pin one "Start here" Discussion linking the five-minute path and design-partner form or contact.
+- Enable Discussions with `Ideas`, `Show and tell`, and `Q&A` categories only
+  after moderation ownership is assigned.
+- When Discussions are enabled, pin one "Start here" post linking the
+  five-minute path and design-partner contact.
 
 ### T54 Labs Website
 
@@ -244,8 +248,8 @@ Post 1:
 
 > Parallel coding Agents are easy to start. The hard part is when Codex and
 > Claude Code touch the same staging environment, database, branch, browser, or
-> server without knowing each other's plan. We built Commons for the work
-> between the work.
+> server without knowing each other's plan. We built Commons to coordinate
+> those independently started sessions.
 
 Post 2:
 
@@ -282,7 +286,7 @@ Post 6:
 > AI-native engineering is moving from one assistant per developer to several
 > independent Agents working across repositories and machines. That creates a
 > new control-plane problem: intent, ownership, shared resources, evidence, and
-> handoff. T54 Labs is preparing to open-source Commons, a private coordination
+> handoff. T54 Labs is open-sourcing Commons, a private coordination
 > layer for Codex, Claude Code, and other CLI Agents. It is deliberately not an
 > Agent launcher or public network. It is the operational layer between Agents
 > and the engineering systems they share.
@@ -322,9 +326,10 @@ community:
 
 ### T0: Public Launch
 
-- Make the repository public.
+- Push the audited clean history to the already-public repository.
 - Verify anonymous clone, README images, release assets, and issue forms.
-- Publish the GitHub release and T54 Labs essay.
+- Recreate the verified GitHub release, confirm `main` CI, and publish the T54
+  Labs essay.
 - Post Hacker News first, then the X thread and LinkedIn post.
 - Respond to technical criticism with code or docs links rather than slogans.
 

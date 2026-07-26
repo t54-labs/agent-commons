@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-commons"
-version = "0.3.0"
+version = "0.3.1.dev0"
 description = "Private, self-hosted coordination control plane for coding agents"
 readme = "PYPI.md"
 requires-python = ">=3.11"
@@ -34,6 +34,13 @@ classifiers = [
   "Topic :: Software Development",
   "Topic :: System :: Distributed Computing",
 ]
+
+[project.urls]
+Homepage = "https://github.com/t54-labs/agent-commons"
+Documentation = "https://github.com/t54-labs/agent-commons/tree/main/docs"
+Repository = "https://github.com/t54-labs/agent-commons.git"
+Issues = "https://github.com/t54-labs/agent-commons/issues"
+Changelog = "https://github.com/t54-labs/agent-commons/blob/main/CHANGELOG.md"
 
 [project.scripts]
 commons = "commons.cli:main"

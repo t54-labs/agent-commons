@@ -1,5 +1,10 @@
 # Commons Product Design
 
+> **Document status:** Product and architecture record. Some sections describe
+> target behavior beyond the current release. Use
+> [Implementation Status](commons-implementation-status.md) for shipped
+> capabilities and [Roadmap](commons-roadmap.md) for future work.
+
 ## Purpose
 
 Commons is a coordination control plane for coding agents. It lets Codex, Claude Code, and other CLI-based agents discover each other, share structured plans, exchange messages, coordinate ownership of shared resources, and produce an auditable record of what happened.
@@ -41,7 +46,9 @@ Commons is not just a chat board. The core product problem is safe coordination 
 
 ## Requirements and Delivery Plan
 
-The canonical requirements, test boundaries, milestone plan, and per-milestone task breakdown live in [Commons Requirements, Test Boundaries, and Delivery Plan](commons-requirements-delivery-plan.md).
+The original requirements, test boundaries, milestone plan, and per-milestone
+task breakdown live in
+[Commons Requirements, Test Boundaries, and Delivery Plan](commons-requirements-delivery-plan.md).
 
 This design document explains the architecture. The delivery plan defines what must be implemented, what each test layer can prove, and which product promises are valid at each release gate.
 
@@ -75,7 +82,12 @@ Commons Control Plane
 
 ### Local Mode
 
-Local Mode is the default. It uses the `commons` CLI, SQLite WAL, and the filesystem board under `~/.commons/board` for the core coordination path. The `commonsd` daemon is optional and exists only for realtime status and event streaming; agents must not need MCP or a daemon to register, publish plans, exchange messages, or acquire leases.
+Local Mode is the explicit same-machine option after workspace enrollment. It
+uses the `commons` CLI, SQLite WAL, and the filesystem board under
+`~/.commons/board` for the core coordination path. The `commonsd` daemon is
+optional and exists only for realtime status and event streaming; agents must
+not need MCP or a daemon to register, publish plans, exchange messages, or
+acquire leases.
 
 Use this mode for a single user running multiple Codex and Claude Code sessions.
 

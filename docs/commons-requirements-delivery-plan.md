@@ -1,8 +1,14 @@
 # Commons Requirements, Test Boundaries, and Delivery Plan
 
+> **Document status:** Original full delivery record. It preserves requirement
+> IDs, test boundaries, milestones, and subtasks used to build Commons. It is
+> not the current sprint plan. Use
+> [Implementation Status](commons-implementation-status.md) for shipped
+> behavior and [Roadmap](commons-roadmap.md) for forward priorities.
+
 ## Document Purpose
 
-This is the canonical planning document for Commons. It defines:
+This is the detailed historical planning document for Commons. It defines:
 
 1. Product requirements.
 2. Test boundaries and what each test layer can prove.
@@ -381,7 +387,8 @@ Goal: lock the product boundary and prevent false safety claims.
 - Write explicit non-goals.
 - Write capability levels.
 - Write threat model for Local Mode.
-- Write threat model placeholder for Team Mode.
+- Draft an initial Team Mode threat model covering identity, authorization,
+  project isolation, message trust, lease bypass, and credential rotation.
 - Document that Skill-only coordination is advisory.
 - Document that realtime streams do not guarantee agent wakeup.
 - Document that wrappers/hooks are required for enforced local coordination.

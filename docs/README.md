@@ -7,7 +7,8 @@ from the deeper product and implementation records used by maintainers.
 
 | Document | Use it when |
 | --- | --- |
-| [Getting Started](getting-started.md) | You want to install Commons, choose a workspace scope, or connect to a Team Relay. |
+| [Getting Started](getting-started.md) | You want to install the PyPI package, activate the Skill, and choose workspace scope through an Agent. |
+| [Team Onboarding](team-onboarding.md) | You operate a private Relay and need to enroll teammates, machines, and projects. |
 | [Why Commons](why-commons.md) | You want to understand the problem boundary and how Commons fits with adjacent agent tooling. |
 | [Architecture](architecture.md) | You need the components, trust boundaries, consistency model, and failure behavior. |
 | [Dogfooding Commons](dogfooding.md) | You want the operating discipline used by T54 Labs and this repository. |
@@ -41,7 +42,7 @@ records, not the recommended first read for a new user.
 | [Relay Server Plan](commons-relay-server-plan.md) | Remote coordination design and rollout decisions. |
 | [Feedback Hardening Plan](commons-feedback-hardening-plan.md) | Reliability and trust improvements derived from real use. |
 | [Implementation Status](commons-implementation-status.md) | Implemented, deferred, and verified product surface. |
-| [Roadmap](commons-roadmap.md) | Planned milestones and release gates. |
+| [Roadmap](commons-roadmap.md) | Current baseline, known limits, planned milestones, and release gates. |
 
 ## Governance and Release
 
@@ -51,6 +52,7 @@ records, not the recommended first read for a new user.
 | [Governance](../GOVERNANCE.md) | Maintainer roles, decisions, releases, and AI-assisted contribution policy. |
 | [Changelog](../CHANGELOG.md) | Released and unreleased user-visible changes. |
 | [Code of Conduct](../CODE_OF_CONDUCT.md) | Community standards and enforcement. |
+| [Public Asset Provenance](assets/README.md) | Origin and reproduction path for screenshots, generated imagery, previews, and audio. |
 
 ## Maintainer Material
 
@@ -59,6 +61,8 @@ records, not the recommended first read for a new user.
 | [Launch Campaign](maintainers/launch-campaign.md) | Positioning, channels, campaign cadence, copy, and success metrics. |
 | [Demo and Recording Script](maintainers/demo-script.md) | Reproducible short and long product demos. |
 | [Release Checklist](maintainers/release-checklist.md) | Technical and communication gates for a public release. |
+| [PyPI Trusted Publishing](maintainers/trusted-publishing.md) | OIDC publisher identity, approval, first-release, and token-retirement procedure. |
+| [Public Repository Cutover](maintainers/public-repository-cutover.md) | Clean two-commit history generation, private archive preservation, and public launch gates. |
 
 ## Documentation Rules
 

@@ -458,7 +458,7 @@ export const TopologyScene: React.FC<{duration: number}> = ({duration}) => {
 
 export const ClosingScene: React.FC<{duration: number}> = ({duration}) => {
   const frame = useCurrentFrame();
-  const github = "github.com/t54-labs/commons";
+  const github = "github.com/t54-labs/agent-commons";
   return (
     <SceneCanvas duration={duration} label="Open source by T54 Labs" accent={COLORS.yellow} dark>
       <div style={{display: "grid", height: "100%", placeItems: "center", textAlign: "center"}}>
@@ -491,7 +491,7 @@ export const PosterScene: React.FC = () => (
       <span style={{display: "block", fontSize: 74, fontWeight: WEIGHT.medium, lineHeight: 1.08}}>The shared control plane for coding agents.</span>
       <p style={{margin: "31px 0 0", color: COLORS.inkSoft, fontSize: 29, lineHeight: 1.43}}>Plans, messages, tasks, and fenced resource leases across sessions, repositories, and machines.</p>
       <div style={{display: "flex", gap: 11, marginTop: 40}}><Pill tone="teal">Codex</Pill><Pill tone="blue">Claude Code</Pill><Pill tone="yellow">CLI agents</Pill></div>
-      <div style={{marginTop: 100, fontFamily: MONO, color: COLORS.teal, fontSize: 23}}>github.com/t54-labs/commons</div>
+      <div style={{marginTop: 100, fontFamily: MONO, color: COLORS.teal, fontSize: 23}}>github.com/t54-labs/agent-commons</div>
     </div>
     <div style={{position: "absolute", top: 105, right: 75, width: 1060, height: 790, overflow: "hidden", background: COLORS.paper, border: `1px solid ${COLORS.aqua}`, borderRadius: 5, boxShadow: "22px 26px 0 rgba(111,185,184,.34)"}}>
       <Img src={staticFile("commons-console-overview.png")} style={{width: "100%", height: "100%", objectFit: "cover"}} />

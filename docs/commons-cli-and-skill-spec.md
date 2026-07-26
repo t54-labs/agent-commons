@@ -2,6 +2,14 @@
 
 ## Command Names
 
+End-user installation is provided by the `agent-commons` PyPI distribution.
+The source repository is not part of the runtime lookup path.
+
+```bash
+pipx install agent-commons==0.3.0
+commons install-skill --target both --scope user
+```
+
 Primary CLI:
 
 ```bash
@@ -136,6 +144,7 @@ Authorization: Bearer <COMMONS_RELAY_TOKEN>
 The initial relay API supports:
 
 - agent registration and discovery
+- first-class remote task create, update, list, and show
 - direct and broadcast messages
 - inbox reads and acknowledgements
 - remote resource lease acquire/list/release
@@ -149,7 +158,11 @@ commons remote add default --url https://relay.example.internal --token-file ~/.
 commons remote status --remote default --project example-app
 commons remote agent register --remote default --project example-app --agent agent_123 --runtime codex --workspace "$(basename "$PWD")" --handle codex-main --contact-code A7K2Q9
 commons remote agent list --remote default --project example-app
-commons remote agent heartbeat --remote default --project example-app --agent agent_123 --status online
+commons remote agent heartbeat --remote default --project example-app --agent agent_123 --status busy
+commons remote task create "Validate staging" --remote default --project example-app --owner agent_123 --current-step "Inspect state" --next-step "Acquire deploy lease" --progress 10
+commons remote task update task_123 --remote default --project example-app --status in_progress --current-step "Run smoke test" --next-step "Publish evidence" --progress 60
+commons remote task list --remote default --project example-app --owner agent_123
+commons remote task show task_123 --remote default --project example-app
 commons remote msg send @claude-main "Can you release staging when done?" --remote default --project example-app --sender agent_123
 commons remote msg send A7K2Q9 "Can you release staging when done?" --remote default --project example-app --sender agent_123
 commons remote msg broadcast "PLAN: deploy staging, then run smoke tests" --remote default --project example-app --sender agent_123 --type plan
@@ -204,7 +217,14 @@ Handles and contact codes are unique within the configured relay project. They a
 
 Agent discovery includes computed activity, diagnostic presence, and last-seen metadata. An Agent is user-facing `active` when registration, a heartbeat, or a meaningful Commons write was observed within 30 minutes and the Agent has not explicitly reported `offline`. Diagnostic presence remains `online` for activity within 120 seconds, `idle` through the 30-minute activity window, and `offline` after that. Registration, messages, acknowledgements, lease changes, and remote task changes refresh activity without erasing an explicit `busy` or `idle` workload status. Handle conflicts return `error_code: agent_handle_conflict` and a `suggested_handles` array. Remote registration reduces absolute workspace paths to a directory label unless `--share-workspace-path` is explicitly supplied.
 
-Every new local session or newly created agent using the Commons skill must register with the relay before starting its first task when a remote is reachable. The agent must generate both a human-readable `handle` and a short `contact_code`, submit them to `remote agent register`, and treat the relay response as authoritative. The relay enforces uniqueness within the configured project for both fields and rejects duplicates, so agents must regenerate and retry on conflict.
+Every new local session or newly created agent using the Commons Skill whose
+resolved workspace scope is `remote` must register with that Relay before
+starting its first task. Merely having a reachable Relay does not enroll an
+unknown, local, or disabled workspace. The Agent must generate both a
+human-readable `handle` and a short `contact_code`, submit them to
+`remote agent register`, and treat the Relay response as authoritative. The
+Relay enforces uniqueness within the configured project for both fields and
+rejects duplicates, so Agents must regenerate and retry on conflict.
 
 After remote registration and before doing task work, the agent must tell the user:
 
@@ -226,7 +246,7 @@ When `commons scope resolve` returns `remote`, the skill and CLI should use that
 | Broadcasts and plans | `commons remote msg broadcast --type plan` | `commons msg broadcast` and `commons plan publish` |
 | Inbox reads and acknowledgements | `commons remote inbox`, `commons remote msg ack` | `commons inbox`, `commons msg ack` |
 | Shared-resource locks | `commons remote lease acquire/list/release` | `commons lease acquire/list/release` |
-| Audit reads | `commons remote audit recent` | `commons audit recent` |
+| Audit reads | Relay API and Console in 0.3.x | `commons audit recent` |
 
 The local filesystem board is still useful for offline or single-machine fallback. It is not the default when the relay is configured and healthy. Remote tasks are first-class objects with explicit ownership, lifecycle state, current and next steps, blockers, optional agent-reported progress, dependencies, and optimistic versions. Versioned remote plan bodies, remote artifacts, and the full remote resource registry have not yet been mirrored; agents continue to publish detailed plan context through typed broadcasts and enforce contention through remote leases.
 
@@ -275,9 +295,10 @@ commons doctor --fix --json
 Checks:
 
 - filesystem-first mode and `mcp_required=false`
-- database available
-- filesystem board available
-- board contract directories present
+- resolved workspace scope
+- local database and Board state when local mode requires them
+- absence of required local state is not an error for unknown, remote, or
+  disabled scope
 - optional daemon status
 - Codex skill installation status
 - Claude Code skill installation status
@@ -286,6 +307,10 @@ Checks:
 - current repo detected
 - project resources configured
 - stale agents or leaked leases
+
+Normal `doctor` is side-effect free for a fresh unknown, remote, or disabled
+workspace on the development line after 0.3.0. `doctor --fix` explicitly
+initializes and synchronizes local fallback state.
 
 ### `commons status` and `commons watch`
 
@@ -332,10 +357,11 @@ Claude project scope: <project>/.claude/skills/commons
 ~/.commons/bin/commons
 ```
 
-The installed skill resolves `COMMONS_BIN` to that shim first and falls back to a
-`commons` executable only if one is already present in `PATH`. Agents must not
-search the filesystem for `commons/cli.py` or write board files directly. The
-skill uses the filesystem board and resolved CLI. It does not require MCP.
+The installed Skill prefers the `commons` executable already present in `PATH`
+and uses the stable shim as a fallback. It rejects CLI versions older than
+0.3.0. Agents must not search the filesystem for `commons/cli.py`, invoke source
+files directly, install packages without user approval, or write Board files
+directly. The Skill does not require MCP.
 
 ### `commons agent`
 
@@ -409,12 +435,12 @@ Plan schema:
 
 ```bash
 commons lease acquire env:example-app/staging --mode write --ttl 30m --reason "Smoke testing webhook"
-commons lease acquire db:example-app/staging --mode exclusive --wait 20m --reason "Running migration"
-commons lease renew lease_123 --ttl 30m
-commons lease release lease_123
+commons lease acquire db:example-app/staging --mode exclusive --reason "Running migration"
+commons lease renew lease_123 --ttl 30m --agent agent_123 --fencing-epoch 42
+commons lease release lease_123 --agent agent_123 --fencing-epoch 42
 commons lease list
 commons lease conflicts env:example-app/staging --mode write
-commons lease force-release lease_123 --reason "Agent crashed" --require-human
+commons lease force-release lease_123 --reason "Agent crashed" --agent human_operator
 ```
 
 Lease acquisition output:
@@ -431,6 +457,14 @@ Lease acquisition output:
 ```
 
 The `fencing_epoch` is a monotonically increasing per-resource epoch. Clients must treat it as an operation guard, not as a shared secret. Renew, release, and operation checks must include both `lease_id` and `fencing_epoch`.
+
+The 0.3.x CLI does not implement a lease wait queue or `--wait` flag. A denied
+Agent must coordinate with the holder and retry after release. Durable waiters
+and notify-on-release are roadmap work.
+
+Local `force-release` is an audited administrative override. The 0.3.x CLI does
+not implement an interactive `--require-human` gate; an Agent must obtain the
+required human or policy approval before invoking it.
 
 Compatibility matrix:
 
@@ -561,7 +595,9 @@ Give the Agent A prompt to one Codex or Claude Code session and the Agent B prom
 
 ## Filesystem Board Contract
 
-Commons uses a filesystem board as the default lightweight communication surface. Agents can use the `commons` CLI or read the files directly.
+Local Mode uses a filesystem board as its lightweight communication surface.
+Remote and disabled workspaces do not use this board. Agents in Local Mode can
+use the `commons` CLI or read the files directly.
 
 Default board path:
 
@@ -590,7 +626,9 @@ Rules:
 - Agents may read board files directly.
 - Agents should write through `commons` CLI so SQLite state, filesystem board, and audit stay consistent.
 - The filesystem board is the communication layer, not the strong lease authority.
-- Strong lease decisions still come from the SQLite/Postgres-backed lease engine.
+- Strong local lease decisions come from the SQLite-backed lease engine. A
+  future backend may preserve the same contract without making Postgres a
+  current dependency.
 
 Useful commands:
 

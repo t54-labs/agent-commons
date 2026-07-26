@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security report
-    url: https://github.com/t54-labs/commons/security/advisories/new
+    url: https://github.com/t54-labs/agent-commons/security/advisories/new
     about: Report vulnerabilities privately. Never put secrets or exploit details in a public issue.
   - name: Documentation
-    url: https://github.com/t54-labs/commons/tree/main/docs
+    url: https://github.com/t54-labs/agent-commons/tree/main/docs
     about: Start with the documentation map and getting-started guide.

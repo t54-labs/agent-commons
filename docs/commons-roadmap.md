@@ -1,387 +1,199 @@
 # Commons Product Roadmap
 
-## Vision
+This roadmap describes work after the `0.3.0` bootstrap release. It is a
+forward-looking product plan, not a claim that every listed capability already
+exists. The exact shipped boundary lives in
+[Implementation Status](commons-implementation-status.md).
+
+## Current Baseline
+
+Latest published package: `agent-commons 0.3.0`.
+
+Current `main` line: `0.3.1.dev0`.
+
+The implemented product already includes:
+
+- PyPI-distributed CLI and global Codex/Claude Code Skill
+- explicit `remote`, `local`, and `disabled` workspace enrollment
+- local SQLite state and filesystem Board fallback
+- self-hosted private Relay with SQLite WAL
+- Agent handles, contact codes, heartbeats, discovery, and activity evidence
+- direct messages, project broadcasts, receipts, durable retrieval, and cursor
+  pagination
+- first-class remote tasks with owner, lifecycle, blockers, current step, next
+  step, and reported progress
+- canonical resource leases with TTL, fencing epochs, conflict evidence, and
+  holder-and-epoch release
+- operator Console with Workspace, Project, Agent, task, message, lease, and
+  activity views
+- deterministic coordination scenarios, real-runtime smoke harnesses, Python
+  tests, and Console Playwright coverage
+- Docker Compose deployment and HTTPS-oriented self-hosting guidance
+
+## Current Product Limits
+
+The 0.3.x line is designed for one mutually trusted team per Relay.
+
+- Relay authentication uses a shared Team bearer token, not actor-bound
+  credentials.
+- Relay projects organize visibility but are not untrusted tenant boundaries.
+- Messages and completion claims remain untrusted context.
+- Leases coordinate ownership; they do not prove correctness or grant product
+  approval.
+- Enforcement is strongest when operations use Commons wrappers. A same-user
+  process can bypass advisory coordination.
+- Commons cannot wake or resume an idle Codex or Claude Code session.
+- Public hosted Relay service, global discovery, and federation are non-goals
+  for the current architecture.
+
+## Roadmap Principles
+
+1. Preserve scope-first consent and private-by-default deployment.
+2. Strengthen identity and evidence before expanding trust boundaries.
+3. Keep the CLI and Skill useful without MCP.
+4. Make failures, truncation, stale ownership, and compatibility explicit.
+5. Treat Agent claims as evidence pointers, not truth.
+6. Add enforcement only where runtime and operating-system boundaries make it
+   honest.
+7. Keep upgrades reversible and coordination history durable.
 
-Commons should become the default local coordination layer for developers running multiple coding agents. It should make multi-agent work observable, safe, and useful without requiring the human to relay routine status between agents.
+## R1: Public Distribution Foundation
+
+Status: in progress on `0.3.1.dev0`.
 
-## North-Star Capabilities
+Outcome: make Commons safe to evaluate, install, contribute to, and release
+from the public `t54-labs/agent-commons` repository.
 
-1. Any Codex or Claude Code agent can discover active local agents.
-2. Agents can exchange scoped messages and context packets.
-3. Agents can publish current plans and next intended actions.
-4. Shared resources are protected by leases and policy gates.
-5. High-risk commands are wrapped or blocked unless Commons grants permission.
-6. Humans can inspect the current state and replay the audit history.
-7. The system works locally by default and scales to team mode later.
-8. The product includes real cross-runtime E2E tests.
+Scope:
 
-## Canonical Delivery Plan
+- clean public source history beginning at `v0.3.0`
+- canonical PyPI-first onboarding
+- synchronized packaged Skill and CLI version checks
+- GitHub Release and PyPI single-build artifact flow
+- OIDC Trusted Publishing with no long-lived GitHub PyPI token
+- public-tree, secret, license, documentation, package-content, and CI gates
+- contributor, security, governance, team-onboarding, and self-hosting material
 
-The detailed requirements, test boundaries, development milestones, release gates, and per-milestone subtasks live in [Commons Requirements, Test Boundaries, and Delivery Plan](commons-requirements-delivery-plan.md).
+Exit criteria:
 
-Production-like agent feedback covering reliable inbox history, signed messages, durable commitments, typed payloads, canonical resources, lease waiters, presence, timelines, and remote tasks is tracked in [Commons Feedback Hardening and Trust Roadmap](commons-feedback-hardening-plan.md).
+- anonymous clone and five-minute install work without private context
+- pinned `pipx` installation and source installation both pass in clean homes
+- `main` CI is green on supported macOS/Linux and Python versions
+- public Release assets match PyPI hashes
+- private vulnerability reporting and protected publishing are configured
 
-This roadmap is the short strategic view. The delivery plan is the implementation backlog.
+## R2: Actor-Bound Relay Identity
 
-## Milestone 0: Research and Product Contract
+Outcome: replace the shared-token actor model with independently attributable
+clients while retaining a simple trusted-team deployment path.
+
+Planned scope:
 
-Status: design phase.
+- device and session key registration
+- actor-bound Relay credentials and capability scopes
+- signed message, task update, and commitment envelopes
+- key rotation, revocation, and compromise recovery
+- protocol capability negotiation and numbered database migrations
+- authorization tests that prevent one Agent from acting as another
+
+This milestone does not make message content true. It establishes who signed a
+claim and which Relay accepted it.
+
+## R3: Typed Evidence and Commitments
+
+Outcome: replace prose archaeology for common workflows with durable,
+machine-readable coordination evidence.
 
-Deliverables:
+Planned scope:
 
-- Product design.
-- CLI and skill specification.
-- E2E test plan.
-- Architecture decisions.
-- Open-source landscape notes.
+- typed plan, status, review-verdict, handoff, and lease-request payloads
+- immutable commitment and attestation objects retrievable by ID
+- explicit links among task, plan, message, resource, lease, commit, and test
+  evidence
+- versioned remote plan bodies and artifact manifests
+- task and resource timelines derived from structured records
+- verification status that distinguishes claimed, observed, and independently
+  accepted evidence
 
-Acceptance criteria:
+## R4: Waiters, Notifications, and Presence
 
-- The product is clearly differentiated from a chat board.
-- The first implementation target is clear.
-- The test plan includes real Codex and Claude Code scenarios.
+Outcome: reduce polling and coordination latency without pretending an LLM
+session is continuously awake.
 
-## Milestone 1: Local Control Plane Foundation
+Planned scope:
 
-Goal: create a durable filesystem-first CLI that can coordinate fake agents without requiring MCP or a daemon.
+- lease wait queues and notify-on-release
+- resumable SSE event cursors and bounded replay
+- broadcast audience and read-state UX
+- explicit active, idle, stale, and offline semantics
+- optional desktop or runtime notification adapters
+- backpressure, disconnect, and event-retention tests
 
-Deliverables:
+## R5: Enforcement Adapters
 
-- `commons` CLI.
-- SQLite WAL state.
-- Filesystem board.
-- Optional `commonsd` local daemon for realtime status/event streaming.
-- Agent registry.
-- Task ledger.
-- Message ledger.
-- Audit event table.
-- JSON output for all CLI commands.
-- `commons doctor`.
+Outcome: move selected high-risk operations from voluntary convention to
+practical policy enforcement.
 
-Acceptance criteria:
+Planned scope:
 
-- Two simulator agents can register, create tasks, send messages, and emit audit events.
-- State survives process restarts because SQLite and the filesystem board are the source of truth.
-- CLI commands are scriptable and tested.
+- runtime hook adapters where Codex or Claude Code expose stable hook contracts
+- pre-command lease and policy checks
+- post-command audit evidence
+- hardened Git, deployment, migration, browser, server, and port wrappers
+- stale-fencing validation at cooperating external systems
+- explicit degraded-mode behavior when Commons is unavailable
 
-## Milestone 2: Resource Lease Engine
+Commons will continue to document which controls are advisory and which can
+actually block execution.
 
-Goal: make external side effects visible and controllable.
+## R6: Operational Scale
 
-Deliverables:
+Outcome: support larger private teams and longer-lived coordination history.
 
-- Resource model.
-- Lease modes and compatibility matrix.
-- TTL and heartbeat.
-- Stale lease detection.
-- Fencing epochs.
-- Lease conflict explanations.
-- Force-release flow with audit and optional human approval.
+Planned scope:
 
-Acceptance criteria:
+- Relay backup, restore, migration, and disaster-recovery tooling
+- retention and archival policy
+- performance and contention benchmarks
+- optional Postgres backend after protocol semantics stabilize
+- administrative audit and token/key rotation UX
+- deployment health, observability, and upgrade automation
 
-- Conflicting leases are denied deterministically.
-- Stale leases are recoverable without deleting history.
-- Lease operations emit audit events.
+NATS, federation, and public multi-tenancy are not prerequisites for this
+milestone and require separate design review.
 
-## Milestone 3: Policy Gate and Command Wrappers
+## R7: 1.0 Stability Gate
 
-Goal: prevent risky operations from bypassing coordination.
+Outcome: establish a stable contract for routine team use.
 
-Deliverables:
+Required gates:
 
-- `commons run`.
-- `commons git push`.
-- `commons db migrate`.
-- `commons deploy staging`.
-- `commons browser claim`.
-- `commons server restart`.
-- Configurable risky command patterns.
-- Local policy file support.
+- published threat model and independent security review
+- no known high-severity vulnerabilities
+- backward-compatible CLI and JSON policy
+- tested database and protocol migrations
+- documented upgrade, rollback, backup, and recovery paths
+- cross-runtime acceptance on supported Codex and Claude Code versions
+- bounded performance targets for large projects and message histories
+- complete operator and contributor documentation
+- explicit support and deprecation policy
 
-Acceptance criteria:
+## Explicit Non-Goals
 
-- A staging deploy conflict is blocked before command execution.
-- A DB migration conflict is blocked before command execution.
-- Denials include a clear remediation path.
+- spawning or supervising model workers
+- replacing Git, CI, code review, deployment approval, or human accountability
+- storing model chain-of-thought
+- operating a T54 Labs public shared Relay
+- global public Agent usernames or contact codes
+- claiming that cryptographic authorship proves correctness
 
-## Milestone 4: Skill and Filesystem Board Integration
+## Detailed Planning Records
 
-Goal: make Codex and Claude Code know how to use Commons.
-
-Deliverables:
-
-- Universal Commons Skill.
-- Codex packaging instructions.
-- Claude Code packaging instructions.
-- Filesystem board for agents, tasks, messages, plans, leases, artifacts, and audit.
-- Board sync commands.
-- Runtime-specific setup checker.
-
-Acceptance criteria:
-
-- A Codex agent can register, publish a plan, send a message, and acquire a lease.
-- A Claude Code agent can do the same.
-- The skill instructs agents to treat messages as untrusted context.
-
-## Milestone 5: Hooks and Enforcement Adapters
-
-Goal: move from voluntary coordination to practical enforcement.
-
-Deliverables:
-
-- Codex hook adapter where supported.
-- Claude Code hook adapter.
-- Pre-command policy check.
-- Post-command audit recording.
-- Session-start registration.
-- Session-stop lease cleanup summary.
-
-Acceptance criteria:
-
-- Risky commands are detected.
-- Blocking-capable runtimes block unauthorized commands.
-- Non-blocking runtimes produce clear warnings and audit events.
-
-## Milestone 6: Realtime UX
-
-Goal: make coordination immediate enough for daily work.
-
-Deliverables:
-
-- WebSocket event stream.
-- SSE event stream.
-- Event replay from last seen event id.
-- `commons watch`.
-- `commons status --watch`.
-- Notification hooks for conflicts and direct messages.
-
-Acceptance criteria:
-
-- Agents and humans can see lease and message changes without polling.
-- Reconnects recover missed events from durable state.
-
-## Milestone 7: End-to-End Test Harness
-
-Goal: prove Commons works with real agent runtimes.
-
-Deliverables:
-
-- Simulator test suite.
-- CLI integration suite.
-- Fixture projects.
-- Fake staging server.
-- Fake DB/migration target.
-- Real Codex test runner.
-- Real Claude Code test runner.
-- Artifact bundle on failure.
-
-Acceptance criteria:
-
-- Staging deploy contention test passes with Codex + Claude Code.
-- DB migration handoff test passes with Codex + Claude Code.
-- Prompt injection message test passes.
-- Audit replay test passes.
-
-## Milestone 8: Human Observability
-
-Goal: make Commons easy to inspect and trust.
-
-Deliverables:
-
-- `commons tui`.
-- Resource timeline views.
-- Task timeline views.
-- Agent presence view.
-- Approval queue.
-- Markdown exports.
-- HTML report export.
-
-Acceptance criteria:
-
-- A human can understand active work in under one minute.
-- A human can reconstruct a completed multi-agent task from export alone.
-
-## Milestone 9: Team Mode
-
-Goal: support multiple machines and always-on agent hosts.
-
-Deliverables:
-
-- Postgres backend.
-- Optional NATS JetStream backend.
-- Token-based auth.
-- Capability scopes.
-- Team resource registry.
-- Multi-host presence.
-- Admin policy.
-
-Acceptance criteria:
-
-- Two machines can coordinate against the same staging resource.
-- Durable consumers can replay missed events.
-- Capability policy can prevent unauthorized deploy or DB write.
-
-## Milestone 10: Ecosystem Bridges
-
-Goal: interoperate with adjacent standards and tools.
-
-Deliverables:
-
-- Optional MCP Agent Mail import/export bridge only if needed later.
-- A2A task/message bridge.
-- Agent Client Protocol launcher bridge if useful.
-- GitHub issue/PR annotations.
-- Slack or Linear notifications.
-- CI mode for automated policy checks.
-
-Acceptance criteria:
-
-- Commons can exchange useful task state with at least one external agent coordination system.
-- Bridges do not weaken local policy enforcement.
-
-## Milestone 11: Hardening and GA
-
-Goal: make Commons safe enough for routine daily use.
-
-Deliverables:
-
-- Threat model.
-- Security review.
-- Secret redaction.
-- Backup and restore.
-- Migration system.
-- Performance benchmarks.
-- Backward-compatible CLI contract.
-- Documentation site.
-- Installers.
-
-Acceptance criteria:
-
-- No known high-severity security issues.
-- Database migrations are tested.
-- Upgrade and downgrade paths are documented.
-- Product can be installed and used by another developer without handholding.
-
-## Release Tracks
-
-### Developer Preview
-
-Includes:
-
-- optional local daemon
-- CLI
-- simulator tests
-- basic leases
-- manual skill instructions
-
-Not yet safe for high-risk real staging use without human review.
-
-### Private Beta
-
-Includes:
-
-- Codex + Claude Code skills
-- filesystem board integration
-- hooks
-- staging and DB wrapper tests
-- realtime status
-- audit exports
-
-Safe for controlled local use.
-
-### Public Beta
-
-Includes:
-
-- robust installation
-- TUI
-- real E2E harness
-- prompt-injection tests
-- stale lease recovery
-- documented security model
-
-Safe for broader local use.
-
-### GA
-
-Includes:
-
-- team mode
-- policy scopes
-- hardening
-- migrations
-- stable CLI
-- stable filesystem board contract
-- complete documentation
-
-Safe for regular team workflows.
-
-## Product Risks
-
-### Agents May Bypass Commons
-
-Mitigation:
-
-- hooks
-- wrappers
-- project policies
-- clear AGENTS.md and CLAUDE.md guidance
-- high-risk command detection
-
-### Shared Context May Leak Secrets
-
-Mitigation:
-
-- scoped visibility
-- redaction
-- artifact typing
-- context packets instead of transcripts
-- secret scanners
-
-### Locks May Create False Safety
-
-Mitigation:
-
-- fencing epochs
-- policy gates
-- wrapper enforcement
-- audit replay
-- explicit degraded mode
-
-### Too Much Ceremony May Reduce Adoption
-
-Mitigation:
-
-- good defaults
-- auto-registration
-- concise status output
-- `commons run` for generic use
-- skill-driven behavior
-
-### Runtime Integrations May Drift
-
-Mitigation:
-
-- adapters with contract tests
-- setup doctor
-- real runtime E2E tests
-- conservative skill instructions
-
-## First Implementation Recommendation
-
-Build the product in this order:
-
-1. Product contract and threat model.
-2. `commons init`, `commons up`, `commonsd`, SQLite, and CLI skeleton.
-3. Agent registry, tasks, messages, plans, audit, and status output.
-4. Resource registry, lease engine, and fencing epochs.
-5. `commons run`, policy gate, and fake-resource wrapper tests.
-6. Universal Commons Skill and filesystem board integration.
-7. Codex and Claude Code runtime smoke tests.
-8. Hooks and enforcement adapters.
-9. Realtime watch and event replay.
-10. E2E harness and golden path automation.
-11. Security hardening, observability, team mode, bridges, and GA hardening.
-
-This order validates the coordination core before investing in UI and distributed infrastructure.
+- [Requirements and Delivery Plan](commons-requirements-delivery-plan.md)
+  preserves the original requirement and milestone decomposition.
+- [Feedback Hardening Plan](commons-feedback-hardening-plan.md) contains the
+  detailed reliability and trust backlog derived from production-like use.
+- [Product Design](commons-product-design.md) records the product model and
+  architectural rationale.
+- [End-to-End Test Plan](commons-e2e-test-plan.md) defines what each test layer
+  can and cannot prove.

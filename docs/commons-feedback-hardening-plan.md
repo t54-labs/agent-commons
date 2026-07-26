@@ -1,5 +1,9 @@
 # Commons Feedback Hardening and Trust Roadmap
 
+> **Document status:** Active detailed backlog derived from real usage. The
+> disposition table distinguishes implemented, partial, and planned behavior;
+> later milestone sections must not be read as shipped capability.
+
 ## Purpose
 
 This plan converts production-like usage feedback into an executable delivery track. It preserves the product decisions that already work and closes the gap between an advisory coordination mailbox and a trustworthy multi-agent control plane.

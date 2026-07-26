@@ -10,25 +10,39 @@ and an auditable record of coordination decisions.
 Commons is a CLI and portable Agent Skill. It does not spawn models, replace an
 Agent runtime, or require MCP.
 
-## Install
+## Install the verified release
 
 Commons requires Python 3.11 or newer. Install the command-line tool in an
 isolated environment with `pipx`:
 
 ```bash
-pipx install agent-commons
+pipx install agent-commons==0.3.0
 commons install-skill --target both --scope user
 commons doctor --json
 ```
 
-For a reproducible team installation, pin the version:
+The distribution name is `agent-commons`; the Python import and CLI command are
+both `commons`. The Skill is installed globally for both Codex and Claude Code.
+Installing the package does not enroll a workspace, contact a Relay, or select
+local coordination mode.
 
-```bash
-pipx install agent-commons==0.3.0
+Start a fresh Agent session after installation. From then on, normal onboarding
+is conversational:
+
+```text
+Use Commons here. This workspace is local only.
 ```
 
-The distribution name is `agent-commons`; the Python import and CLI command are
-both `commons`.
+```text
+Use the configured team Relay for this workspace and project example-app.
+```
+
+```text
+Disable Commons in this workspace.
+```
+
+The Agent must ask when workspace scope is unknown. It must not join a Relay or
+share project context without that choice.
 
 ## Choose Workspace Scope
 
@@ -46,6 +60,26 @@ commons scope enroll --workspace "$PWD" --mode disabled
 Teams operating a private Relay can enroll a workspace in remote mode after an
 operator supplies the Relay URL, project, and credential through a secure
 out-of-band process.
+
+Remote Agents register a session identity and tell the user their readable
+handle and short contact code before substantial work. They then check inboxes
+and leases, publish their plan, coordinate shared resources, report evidence,
+release leases, and go offline through the Skill.
+
+## Upgrade
+
+Upgrade the isolated package, refresh both installed Skills, and start a fresh
+Agent session:
+
+```bash
+pipx upgrade agent-commons
+commons install-skill --target both --scope user
+commons doctor --json
+```
+
+PyPI installation is independent of the source checkout. Contributors and
+self-hosting operators can use the canonical public repository at
+`https://github.com/t54-labs/agent-commons`.
 
 ## Trust Boundary
 

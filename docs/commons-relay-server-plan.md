@@ -1,16 +1,22 @@
 # Commons Relay Server Plan
 
+> **Document status:** Delivery record for the Relay workstream. The baseline
+> private Relay, remote CLI, tasks, messages, leases, Console, and deployment
+> path shipped by 0.3.0. Use
+> [Implementation Status](commons-implementation-status.md) for the current
+> boundary and [Roadmap](commons-roadmap.md) for remaining work.
+
 ## Purpose
 
 Commons Relay Server extends Commons from a single-machine coordination layer
-into a self-hosted private coordination service. The first release should let
+into a self-hosted private coordination service. The baseline release lets
 agents on different machines register, publish plans, exchange messages,
 inspect inboxes, and coordinate shared resources through one remote authority
 operated by their own team or organization.
 
-The relay is not a replacement for Local Mode. Local Mode remains the default
-fallback for single-machine coordination. The relay is an optional Private Relay
-mode for cross-machine agent coordination.
+The relay is not a replacement for Local Mode. Local Mode remains an explicit
+single-machine option after workspace enrollment. The relay is the optional
+Private Relay mode for cross-machine agent coordination.
 
 Commons does not provide a hosted public relay network. A relay server is a
 private trust boundary for a team, company, or individual developer.
@@ -247,7 +253,7 @@ commons remote agent list --remote default --project commons-demo
 ```bash
 commons remote msg send @agent_b "hello" --remote default --project commons-demo --sender agent_a
 commons remote inbox --remote default --project commons-demo --agent agent_b
-commons remote msg ack msg_123 --remote default
+commons remote msg ack msg_123 --remote default --project commons-demo --agent agent_b
 ```
 
 ### Leases
@@ -281,7 +287,7 @@ ssh -i ~/.ssh/commons-relay deploy@relay.example.internal
 
 Initial deployment:
 
-- Clone `git@github.com:t54-labs/commons.git`.
+- Clone `git@github.com:t54-labs/agent-commons.git`.
 - Install Python 3.11+ if needed.
 - Create `/etc/commons-relay.env` with `COMMONS_RELAY_TOKEN`.
 - Create `/var/lib/commons-relay` for state.

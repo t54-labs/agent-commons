@@ -82,7 +82,8 @@ relay.example.internal {
 
 ## Console Build and Authentication
 
-Build the static Console bundle on a build host with Node.js 20 or newer:
+Build the static Console bundle on a build host with Node.js 22 or newer, which
+matches the verified CI toolchain:
 
 ```bash
 cd web
@@ -157,7 +158,7 @@ Run this from a client with `remote default` configured:
 ~/.commons/bin/commons remote status --remote default --project my-project --json
 ~/.commons/bin/commons remote agent register --remote default --agent codex_smoke --runtime codex --workspace /tmp/codex-smoke --handle codex-smoke --contact-code C7DX92 --json
 ~/.commons/bin/commons remote agent register --remote default --agent claude_smoke --runtime claude-code --workspace /tmp/claude-smoke --handle claude-smoke --contact-code C7DX93 --json
-~/.commons/bin/commons remote msg send @claude_smoke "relay smoke hello" --remote default --sender codex_smoke --thread thread_relay_smoke --json
+~/.commons/bin/commons remote msg send @claude-smoke "relay smoke hello" --remote default --sender codex_smoke --thread thread_relay_smoke --json
 ~/.commons/bin/commons remote inbox --remote default --agent claude_smoke --unread-only --json
 ~/.commons/bin/commons remote lease acquire deploy-slot:relay-smoke/staging --remote default --mode exclusive --agent codex_smoke --ttl 2m --reason "relay smoke" --json
 ```

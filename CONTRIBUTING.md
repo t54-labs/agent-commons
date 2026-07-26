@@ -19,6 +19,10 @@ proposal before implementation.
 
 ## Development Setup
 
+End users should install `agent-commons` from PyPI. A source checkout is for
+contributors, maintainers, and self-hosting operators; it is not an alternative
+onboarding path for ordinary Agent sessions.
+
 Requirements:
 
 - macOS or Linux for the verified CLI and installer workflow
@@ -27,11 +31,31 @@ Requirements:
 - Docker Compose for container changes
 
 ```bash
-git clone https://github.com/t54-labs/commons.git
-cd commons
-python3 -m pip install -e .
+git clone https://github.com/t54-labs/agent-commons.git
+cd agent-commons
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip build
+python -m pip install -e .
 npm --prefix web ci
 ```
+
+Keep the development environment separate from a user-level pipx installation.
+The editable checkout reports the development version from `main`; the latest
+published stable package may be an earlier version.
+
+To test the source installer and packaged Skill without replacing your normal
+Commons home:
+
+```bash
+export COMMONS_HOME="$(mktemp -d)"
+./scripts/install.sh --source . --commons-home "$COMMONS_HOME"
+"$COMMONS_HOME/bin/commons" doctor --json
+```
+
+Running `./scripts/install.sh` without `--source .` intentionally installs the
+verified PyPI release. This keeps the end-user bootstrap reproducible even when
+the script is viewed from a source checkout.
 
 Useful targets:
 
@@ -40,6 +64,7 @@ make test-python
 make docs-check
 make web-build
 make web-e2e
+make video-check
 make test-all
 make demo
 ```
@@ -56,6 +81,22 @@ make demo
 
 The canonical and packaged Skill files must remain byte-for-byte identical.
 `make docs-check` enforces this.
+
+## Package and Skill Versioning
+
+The PyPI distribution is `agent-commons`; the Python package, CLI, and Skill
+product name are `commons`. User-visible CLI or Skill changes require all of the
+following:
+
+- an entry under `Unreleased` in `CHANGELOG.md`
+- synchronized canonical and packaged Skill files when Skill behavior changes
+- a development version on `main`, never the previous stable version
+- a release commit that aligns package version, tag, changelog, and pinned
+  onboarding examples
+
+The public `t54-labs/agent-commons` repository is the canonical source for
+contributions and releases. The separate private development archive is not a
+contribution target and its Git history must never be copied into this project.
 
 ## Change Expectations
 

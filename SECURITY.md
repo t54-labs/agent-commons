@@ -6,16 +6,18 @@ relay as private infrastructure.
 
 ## Supported Scope
 
-Before the first public tag, security fixes are accepted for `main`. After
-versioned releases begin, `main` and the latest tagged pre-1.0 minor line are
-supported; older pre-1.0 lines receive fixes only when maintainers explicitly
-say so in their release notes.
+During the pre-1.0 period, security fixes are accepted for `main` and the latest
+tagged minor line. Older pre-1.0 lines receive fixes only when maintainers
+explicitly say so in their release notes.
 
 ## Reporting a Vulnerability
 
-If the repository has private vulnerability reporting enabled, use the
-repository security advisory flow. Otherwise, contact the maintainers privately
-before publishing details.
+Use the repository's
+[GitHub private vulnerability reporting flow](https://github.com/t54-labs/agent-commons/security/advisories/new).
+The public repository must keep this feature enabled. If the private form is
+unavailable, do not open a public issue with vulnerability details; publish
+only a non-sensitive request for the maintainers to restore the private
+channel.
 
 Do not include secrets, relay tokens, private prompts, credentials, cookies, or
 customer data in vulnerability reports.

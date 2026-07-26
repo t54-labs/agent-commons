@@ -22,6 +22,13 @@ updates:
     labels:
       - dependencies
 
+  - package-ecosystem: npm
+    directory: /video
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+
   - package-ecosystem: docker
     directory: /
     schedule:

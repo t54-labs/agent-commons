@@ -37,8 +37,8 @@ project steward makes the final decision and records the rationale.
 
 ## Release Process
 
-Commons follows semantic versioning once a public release is tagged. Before
-`1.0.0`, minor releases may contain documented breaking changes. Every release
+Commons follows semantic versioning for public releases. Before `1.0.0`, minor
+releases may contain documented breaking changes. Every release
 must pass the repository CI, update `CHANGELOG.md`, and satisfy the maintainer
 release checklist.
 

@@ -59,7 +59,9 @@ def pid_path() -> Path:
 
 
 def ensure_base_dirs() -> None:
-    for path in (commons_home(), state_dir(), artifact_dir(), runtime_tests_dir(), relay_dir(), board_dir(), log_dir(), bin_dir()):
+    # The local filesystem board is opt-in state. board.ensure_board() creates
+    # it only after local mode is selected or a local operation needs it.
+    for path in (commons_home(), state_dir(), artifact_dir(), runtime_tests_dir(), relay_dir(), log_dir(), bin_dir()):
         path.mkdir(parents=True, exist_ok=True)
         try:
             path.chmod(0o700)

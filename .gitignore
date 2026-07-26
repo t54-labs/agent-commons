@@ -3,9 +3,36 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .coverage
+.coverage.*
+htmlcov/
 .DS_Store
 .venv/
+node_modules/
 build/
 dist/
 *.egg-info/
 .commons-test/
+.commons/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+!*.env.example
+.pypirc
+*.pem
+*.key
+*.p12
+*.pfx
+*.token
+id_rsa
+id_ed25519
+credentials*.json
+
+# Runtime and test state
+*.db
+*.sqlite
+*.sqlite3
+*.log
+playwright-report/
+test-results/
