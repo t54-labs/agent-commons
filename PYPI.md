@@ -16,7 +16,7 @@ Commons requires Python 3.11 or newer. Install the command-line tool in an
 isolated environment with `pipx`:
 
 ```bash
-pipx install agent-commons==0.3.0
+pipx install agent-commons==0.3.1
 commons install-skill --target both --scope user
 commons doctor --json
 ```

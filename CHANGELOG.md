@@ -8,6 +8,8 @@ for public releases.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-27
+
 ### Added
 
 - Remote Relay and CLI lease renewal with holder-and-epoch fencing. Long-running
@@ -17,10 +19,10 @@ for public releases.
 ### Changed
 
 - The Agent Skill now treats the versioned `agent-commons` PyPI package as the
-  only supported end-user bootstrap, checks for Commons 0.3.0 or newer, and
+  only supported end-user bootstrap, checks for Commons 0.3.1 or newer, and
   gives actionable install or upgrade instructions without searching for a
   source checkout.
-- The repository installer now defaults to the verified 0.3.0 PyPI release;
+- The repository installer now defaults to the verified 0.3.1 PyPI release;
   contributors must opt into a checkout with `--source .`.
 - Onboarding now separates the one-time PyPI client install, conversational
   workspace enrollment, private Team Relay administration, and contributor
@@ -86,4 +88,5 @@ Formal public changelog and source history begin with `0.3.0`. Earlier private
 development history is intentionally excluded from the public repository.
 
 [Unreleased]: https://github.com/t54-labs/agent-commons/commits/main
+[0.3.1]: https://github.com/t54-labs/agent-commons/releases/tag/v0.3.1
 [0.3.0]: https://github.com/t54-labs/agent-commons/releases/tag/v0.3.0

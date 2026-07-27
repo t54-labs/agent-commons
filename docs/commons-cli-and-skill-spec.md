@@ -6,7 +6,7 @@ End-user installation is provided by the `agent-commons` PyPI distribution.
 The source repository is not part of the runtime lookup path.
 
 ```bash
-pipx install agent-commons==0.3.0
+pipx install agent-commons==0.3.1
 commons install-skill --target both --scope user
 ```
 

@@ -66,7 +66,7 @@ tool stays isolated from the system Python. Windows support is not yet part of
 the verified installation matrix.
 
 ```bash
-pipx install agent-commons==0.3.0
+pipx install agent-commons==0.3.1
 commons install-skill --target both --scope user
 commons doctor --json
 ```
@@ -222,8 +222,8 @@ evidence and acceptance discipline used to build this repository.
 ## Project Status
 
 Commons is currently an **alpha** project. The latest published release is
-[`agent-commons 0.3.0`](https://pypi.org/project/agent-commons/0.3.0/); `main`
-is the `0.3.1.dev0` development line. The implemented surface includes local
+[`agent-commons 0.3.1`](https://pypi.org/project/agent-commons/0.3.1/); `main`
+is the `0.3.1` release line. The implemented surface includes local
 and remote coordination, scope-first enrollment, remote
 tasks and messages, fenced leases, deterministic E2E scenarios, runtime smoke
 harnesses, and the operator Console.

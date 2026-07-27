@@ -17,7 +17,7 @@ cross-machine coordination is needed.
 Client installation is independent of the Relay source checkout:
 
 ```bash
-pipx install agent-commons==0.3.0
+pipx install agent-commons==0.3.1
 commons install-skill --target both --scope user
 ```
 

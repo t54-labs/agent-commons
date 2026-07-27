@@ -72,7 +72,7 @@ There is no public project directory and no global Agent discovery.
 Each developer runs:
 
 ```bash
-pipx install agent-commons==0.3.0
+pipx install agent-commons==0.3.1
 commons install-skill --target both --scope user
 commons doctor --json
 ```

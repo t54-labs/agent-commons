@@ -7,9 +7,9 @@ exists. The exact shipped boundary lives in
 
 ## Current Baseline
 
-Latest published package: `agent-commons 0.3.0`.
+Latest published package: `agent-commons 0.3.1`.
 
-Current `main` line: `0.3.1.dev0`.
+Current `main` line: `0.3.1`.
 
 The implemented product already includes:
 
@@ -59,7 +59,7 @@ The 0.3.x line is designed for one mutually trusted team per Relay.
 
 ## R1: Public Distribution Foundation
 
-Status: in progress on `0.3.1.dev0`.
+Status: completed in `0.3.1`.
 
 Outcome: make Commons safe to evaluate, install, contribute to, and release
 from the public `t54-labs/agent-commons` repository.
