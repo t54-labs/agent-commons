@@ -175,6 +175,12 @@ commons remote lease acquire deploy-slot:example-app/staging \
   --ttl 30m \
   --reason "Deploy the candidate image"
 
+# Long-running work renews the same fenced lease without an ownership gap.
+commons remote lease renew <lease-id> \
+  --agent <agent-id> \
+  --fencing-epoch <epoch> \
+  --ttl 30m
+
 commons remote msg send @claude-reviewer \
   "Candidate is live at commit abc123. Please run the independent smoke gate." \
   --sender <agent-id>

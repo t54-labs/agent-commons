@@ -191,6 +191,7 @@ Inbox envelope responses contain `messages` and a `page` object. The relay enfor
 ```http
 POST /v1/leases/acquire
 GET /v1/leases?project_id=...&active=true
+POST /v1/leases/{lease_id}/renew
 POST /v1/leases/{lease_id}/release
 ```
 
@@ -261,6 +262,7 @@ commons remote msg ack msg_123 --remote default --project commons-demo --agent a
 ```bash
 commons remote lease acquire deploy-slot:commons-demo/staging --mode exclusive --remote default --project commons-demo --agent agent_a
 commons remote lease list --active --remote default --project commons-demo
+commons remote lease renew lease_123 --remote default --project commons-demo --agent agent_a --fencing-epoch 42 --ttl 30m
 commons remote lease release lease_123 --remote default --project commons-demo --agent agent_a --fencing-epoch 42
 ```
 
@@ -340,7 +342,7 @@ Subtasks:
 - Add health endpoint.
 - Add agent register/list endpoints.
 - Add message send/inbox/ack endpoints.
-- Add lease acquire/list/release endpoints.
+- Add lease acquire/list/renew/release endpoints.
 - Add audit event rows.
 
 Exit criteria:
@@ -358,7 +360,7 @@ Subtasks:
 - Add `commons remote status`.
 - Add `commons remote agent register/list`.
 - Add `commons remote msg send/inbox/ack`.
-- Add `commons remote lease acquire/list/release`.
+- Add `commons remote lease acquire/list/renew/release`.
 - Add JSON output for every command.
 - Add human-readable output where useful.
 

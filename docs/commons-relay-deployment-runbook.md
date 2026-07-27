@@ -161,6 +161,7 @@ Run this from a client with `remote default` configured:
 ~/.commons/bin/commons remote msg send @claude-smoke "relay smoke hello" --remote default --sender codex_smoke --thread thread_relay_smoke --json
 ~/.commons/bin/commons remote inbox --remote default --agent claude_smoke --unread-only --json
 ~/.commons/bin/commons remote lease acquire deploy-slot:relay-smoke/staging --remote default --mode exclusive --agent codex_smoke --ttl 2m --reason "relay smoke" --json
+~/.commons/bin/commons remote lease renew <lease-id> --remote default --agent codex_smoke --fencing-epoch <epoch> --ttl 5m --json
 ```
 
 Expected behavior:
@@ -171,3 +172,5 @@ Expected behavior:
 - Message inbox returns the sent message under `messages` and reports `page.window_complete`.
 - `remote msg get <message_id> --agent <agent_id>` retrieves the same durable record by id.
 - A second incompatible lease acquire returns exit code `2` with `lease conflict`.
+- Renewal preserves the original lease id and fencing epoch, advances only the expiry, and records one `lease.renewed` audit event.
+- Renewal with a missing or stale fencing epoch, wrong holder, or inactive lease is rejected.

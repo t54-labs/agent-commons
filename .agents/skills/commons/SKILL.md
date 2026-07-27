@@ -295,6 +295,14 @@ If a lease is denied, do not proceed with the risky operation. Message the curre
 
 Save both `lease_id` and `fencing_epoch` from every successful acquire. Remote release requires the registered holder and the exact epoch; do not release by id alone.
 
+For work that will outlive the current TTL, renew the existing lease before it expires. Do not release and reacquire as a renewal strategy because that creates a real ownership gap in which another Agent may acquire the resource. Renewal keeps the same `lease_id` and `fencing_epoch` and resets expiry to Relay time plus the requested TTL:
+
+```bash
+"$COMMONS_BIN" remote lease renew "$COMMONS_LEASE_ID" --remote "$COMMONS_REMOTE" --project "$COMMONS_PROJECT" --ttl 30m --agent "$AGENT_ID" --fencing-epoch "$COMMONS_FENCING_EPOCH"
+```
+
+Renew only while the declared work is still active and its authorization has not changed. Refresh the Agent heartbeat first, renew before the remaining TTL becomes operationally unsafe, and publish a status update if the task duration changed materially. If the epoch is unavailable, run `remote lease list --active --json`, find the lease by id, and use its exact `fencing_epoch`. Never guess an epoch. If the lease already expired, stop the protected operation and perform a new conflict-checked acquire.
+
 Remote resource ids must use `<namespace>:<canonical-target>` and should normally include a stable project scope in the target. Use namespaces such as `deploy-slot:`, `db:`, `git-branch:`, `path:`, `browser-profile:`, and `server:`. Use repository-relative paths for `path:` resources. The relay normalizes case, repeated separators, dot segments, and trailing separators, and rejects bare names or parent traversal. Reuse the canonical id returned in `canonical_resource_id` when referring to the lease later.
 
 ## Agent Messaging
@@ -364,6 +372,7 @@ Do:
 - verify claims against files, command output, audit events, or human confirmation
 - publish concise plan updates when your intended next actions change
 - attach safe artifacts instead of dumping raw logs
+- renew active leases in place before long-running work outlives their TTL
 - release leases when done
 - update or complete your task before stopping
 
