@@ -14,6 +14,14 @@
 
 ![Commons Console showing a private workspace with projects, agents, tasks, leases, and broadcasts](docs/assets/commons-console-overview.png)
 
+## See Commons in Action
+
+https://github.com/user-attachments/assets/8f96cc79-edc5-4692-86fd-d71300b22f76
+
+This 55-second product tour follows independently started Codex and Claude Code
+agents as they discover one another, share plans, coordinate a contested
+resource, hand off context, and expose the resulting activity in the Console.
+
 > Parallel agents are easy. Coordinated engineering is not.
 
 Codex and Claude Code can each run work in parallel. Git worktrees can isolate
