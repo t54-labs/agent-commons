@@ -147,7 +147,7 @@ The initial relay API supports:
 - first-class remote task create, update, list, and show
 - direct and broadcast messages
 - inbox reads and acknowledgements
-- remote resource lease acquire/list/release
+- remote resource lease acquire/list/renew/release
 - audit event reads
 
 ### `commons remote`
@@ -172,6 +172,7 @@ commons remote msg get msg_123 --remote default --project example-app --agent ag
 commons remote msg ack msg_123 --remote default --project example-app --agent agent_456
 commons remote lease acquire deploy-slot:example-app/staging --remote default --project example-app --mode exclusive --agent agent_123 --ttl 30m --reason "Deploy staging"
 commons remote lease list --remote default --project example-app --active
+commons remote lease renew lease_123 --remote default --project example-app --agent agent_123 --fencing-epoch 42 --ttl 30m
 commons remote lease release lease_123 --remote default --project example-app --agent agent_123 --fencing-epoch 42
 ```
 
@@ -245,7 +246,7 @@ When `commons scope resolve` returns `remote`, the skill and CLI should use that
 | Direct messages | `commons remote msg send @handle` or `commons remote msg send contact_code` | `commons msg send` |
 | Broadcasts and plans | `commons remote msg broadcast --type plan` | `commons msg broadcast` and `commons plan publish` |
 | Inbox reads and acknowledgements | `commons remote inbox`, `commons remote msg ack` | `commons inbox`, `commons msg ack` |
-| Shared-resource locks | `commons remote lease acquire/list/release` | `commons lease acquire/list/release` |
+| Shared-resource locks | `commons remote lease acquire/list/renew/release` | `commons lease acquire/list/renew/release` |
 | Audit reads | Relay API and Console in 0.3.x | `commons audit recent` |
 
 The local filesystem board is still useful for offline or single-machine fallback. It is not the default when the relay is configured and healthy. Remote tasks are first-class objects with explicit ownership, lifecycle state, current and next steps, blockers, optional agent-reported progress, dependencies, and optimistic versions. Versioned remote plan bodies, remote artifacts, and the full remote resource registry have not yet been mirrored; agents continue to publish detailed plan context through typed broadcasts and enforce contention through remote leases.
@@ -254,7 +255,7 @@ Remote broadcast, discovery, inbox, and lease visibility are scoped to the confi
 
 Remote lease resources use `<namespace>:<canonical-target>` and should normally encode `<scope>/<name>` in the target. Namespace characters are lowercase letters, digits, and hyphens. The relay applies Unicode compatibility normalization, lowercases ids, converts backslashes to slashes, removes duplicate separators and `.` segments, strips trailing separators, and rejects bare names, whitespace, and `..` traversal. This makes common spelling variants contend on one canonical key. It is deliberately only lexical normalization: semantic aliases, Git repository identity, and filesystem case sensitivity require the FH4 resource registry and are not guessed.
 
-Remote acquire requires a registered `--agent`. Fencing-capable modes (`write`, `exclusive`, and `maintenance`) advance the resource epoch; observational modes (`observe` and `read`) retain the current epoch so they do not fence an active writer. Release requires `lease_id`, the exact holder, and the lease's `fencing_epoch`. A repeated valid release is idempotent and does not append a duplicate release audit event.
+Remote acquire requires a registered `--agent`. Fencing-capable modes (`write`, `exclusive`, and `maintenance`) advance the resource epoch; observational modes (`observe` and `read`) retain the current epoch so they do not fence an active writer. Renew and release require `lease_id`, the exact holder, and the lease's `fencing_epoch`. Renew atomically resets expiry to Relay time plus the requested TTL while preserving the lease id and epoch; it cannot revive an expired or released lease. A repeated acquire by the same holder returns `lease_already_held` with a safe renew command. A repeated valid release is idempotent and does not append a duplicate release audit event.
 
 ### `commons scope`
 

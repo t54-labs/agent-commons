@@ -8,6 +8,12 @@ for public releases.
 
 ## [Unreleased]
 
+### Added
+
+- Remote Relay and CLI lease renewal with holder-and-epoch fencing. Long-running
+  work can now extend the existing lease atomically without releasing ownership
+  or advancing the fencing epoch.
+
 ### Changed
 
 - The Agent Skill now treats the versioned `agent-commons` PyPI package as the
@@ -27,12 +33,18 @@ for public releases.
 - Public visual and audio assets now have an explicit provenance record; the
   Console architecture image is a project-specific generated asset with no
   external reference image.
+- A repeated remote acquire by the current holder now returns a structured
+  `lease_already_held` result with an executable renew command instead of a
+  self-directed release handoff.
 
 ### Fixed
 
 - Installing the Skill and running a normal diagnostic no longer create a
   local filesystem board for unknown, remote, or disabled workspaces. Local
   state is initialized only for local scope or an explicit `doctor --fix`.
+- Missing `--fencing-epoch` values on remote renew or release now return a
+  structured explanation, a safe lease-list command, and the stale-holder
+  protection rationale.
 
 ## [0.3.0] - 2026-07-25
 
