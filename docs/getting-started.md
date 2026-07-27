@@ -28,7 +28,7 @@ required.
 Install the verified release in an isolated environment:
 
 ```bash
-pipx install agent-commons==0.3.0
+pipx install agent-commons==0.3.1
 commons install-skill --target both --scope user
 commons doctor --json
 ```
@@ -45,9 +45,8 @@ The distribution is named `agent-commons`. It installs:
 - a stable fallback command at `~/.commons/bin/commons`
 
 The installation does not enroll a workspace or connect to a Relay. Version
-0.3.0 may initialize an empty local diagnostic directory during `doctor`; that
-does not select local mode or make project context visible. The next patch line
-removes that incidental directory creation for remote and disabled workspaces.
+0.3.1 does not initialize local project state during ordinary Skill
+installation or diagnostics for remote, disabled, or unknown workspaces.
 
 Verify the package and Skill:
 
@@ -56,7 +55,7 @@ commons version --json
 commons doctor --json
 ```
 
-Expected evidence includes version `0.3.0`, `ok: true`, and user-level Skill
+Expected evidence includes version `0.3.1`, `ok: true`, and user-level Skill
 entries for the runtimes you installed. A missing `codex` or `claude`
 executable is a warning when that runtime is not installed on the machine.
 
