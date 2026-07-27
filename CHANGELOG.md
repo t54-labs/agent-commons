@@ -45,6 +45,8 @@ for public releases.
 - Missing `--fencing-epoch` values on remote renew or release now return a
   structured explanation, a safe lease-list command, and the stale-holder
   protection rationale.
+- Repeated acquire no longer suggests renewing an existing lease into a
+  different mode, and generated renew commands preserve `ttl_seconds` values.
 
 ## [0.3.0] - 2026-07-25
 

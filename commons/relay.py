@@ -1271,7 +1271,10 @@ def acquire_lease(payload: dict[str, Any], db: str | None = None) -> dict[str, A
                 (project_id, canonical),
             )
         )
-        conflicts = [row for row in active if lease_conflicts(row["mode"], mode)]
+        same_holder = next((row for row in active if row["holder_agent_id"] == holder), None)
+        conflicts = [same_holder] if same_holder is not None else [
+            row for row in active if lease_conflicts(row["mode"], mode)
+        ]
         if conflicts:
             conflict = row_to_dict(conflicts[0])
             holder_agent = conn.execute(
@@ -1285,6 +1288,7 @@ def acquire_lease(payload: dict[str, Any], db: str | None = None) -> dict[str, A
                 "project_id": project_id,
                 "resource_id": resource_id,
                 "mode": mode,
+                "requested_ttl_seconds": ttl_seconds,
                 "holder_agent_id": conflict["holder_agent_id"],
                 "holder_handle": holder_handle,
                 "holder_contact_code": holder_contact_code,
@@ -1327,30 +1331,40 @@ def acquire_lease(payload: dict[str, Any], db: str | None = None) -> dict[str, A
             }
             if conflict["holder_agent_id"] == holder:
                 details["same_holder"] = True
-                details["safe_next_actions"] = [
-                    shlex.join(
-                        [
-                            "commons",
-                            "remote",
-                            "lease",
-                            "renew",
-                            conflict["lease_id"],
-                            "--remote",
-                            "default",
-                            "--project",
-                            project_id,
-                            "--ttl",
-                            str(payload.get("ttl") or "30m"),
-                            "--agent",
-                            holder,
-                            "--fencing-epoch",
-                            str(conflict["fencing_epoch"]),
-                        ]
-                    ),
-                    details["safe_next_actions"][1],
-                ]
+                if conflict["mode"] == mode:
+                    details["safe_next_actions"] = [
+                        shlex.join(
+                            [
+                                "commons",
+                                "remote",
+                                "lease",
+                                "renew",
+                                conflict["lease_id"],
+                                "--remote",
+                                "default",
+                                "--project",
+                                project_id,
+                                "--ttl",
+                                str(payload.get("ttl") or f"{ttl_seconds}s"),
+                                "--agent",
+                                holder,
+                                "--fencing-epoch",
+                                str(conflict["fencing_epoch"]),
+                            ]
+                        ),
+                        details["safe_next_actions"][1],
+                    ]
+                else:
+                    details["mode_change"] = True
+                    details["safe_next_actions"] = [details["safe_next_actions"][1]]
             audit(conn, "lease.denied", details, project_id, holder, resource_id)
             if details.get("same_holder"):
+                if details.get("mode_change"):
+                    raise RelayDenied(
+                        "lease mode change requires release and a fresh conflict-checked acquire",
+                        details,
+                        code="lease_mode_change_conflict",
+                    )
                 raise RelayDenied("lease already held by requesting agent", details, code="lease_already_held")
             raise RelayDenied("lease conflict", details, code="lease_conflict")
         epoch = int(resource["fencing_epoch"])
