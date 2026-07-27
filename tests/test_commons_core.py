@@ -9,6 +9,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import tomllib
 import urllib.error
@@ -548,6 +549,63 @@ class CommonsCoreTests(unittest.TestCase):
             renew_action = shlex.split(already_held.exception.details["safe_next_actions"][0])
             self.assertEqual(renew_action[:4], ["commons", "remote", "lease", "renew"])
             self.assertIn(str(lease["fencing_epoch"]), renew_action)
+            self.assertEqual(renew_action[renew_action.index("--ttl") + 1], "2h")
+
+            with self.assertRaises(relay.RelayDenied) as mode_change:
+                relay.acquire_lease(
+                    {
+                        "project_id": "renewal",
+                        "resource_id": "deploy-slot:demo/staging",
+                        "mode": "write",
+                        "holder_agent_id": "holder",
+                        "ttl_seconds": 3600,
+                    },
+                    relay_db,
+                )
+            self.assertEqual(mode_change.exception.code, "lease_mode_change_conflict")
+            self.assertTrue(mode_change.exception.details["same_holder"])
+            self.assertTrue(mode_change.exception.details["mode_change"])
+            self.assertEqual(mode_change.exception.details["holder_mode"], "exclusive")
+            self.assertEqual(mode_change.exception.details["mode"], "write")
+            self.assertEqual(mode_change.exception.details["requested_ttl_seconds"], 3600)
+            self.assertEqual(len(mode_change.exception.details["safe_next_actions"]), 1)
+            self.assertNotIn(
+                "renew",
+                shlex.split(mode_change.exception.details["safe_next_actions"][0]),
+            )
+
+            read_lease = relay.acquire_lease(
+                {
+                    "project_id": "renewal",
+                    "resource_id": "db:demo/reporting",
+                    "mode": "read",
+                    "holder_agent_id": "holder",
+                    "ttl": "1m",
+                },
+                relay_db,
+            )
+            with self.assertRaises(relay.RelayDenied) as repeated_read:
+                relay.acquire_lease(
+                    {
+                        "project_id": "renewal",
+                        "resource_id": "db:demo/reporting",
+                        "mode": "read",
+                        "holder_agent_id": "holder",
+                        "ttl_seconds": 3600,
+                    },
+                    relay_db,
+                )
+            self.assertEqual(repeated_read.exception.code, "lease_already_held")
+            read_renew_action = shlex.split(repeated_read.exception.details["safe_next_actions"][0])
+            self.assertEqual(read_renew_action[:4], ["commons", "remote", "lease", "renew"])
+            self.assertEqual(read_renew_action[read_renew_action.index("--ttl") + 1], "3600s")
+            with relay.connect(relay_db) as conn:
+                read_count = conn.execute(
+                    "SELECT COUNT(*) FROM leases WHERE project_id = ? AND canonical_resource_id = ?",
+                    ("renewal", "db:demo/reporting"),
+                ).fetchone()[0]
+            self.assertEqual(read_count, 1)
+            self.assertIn(read_lease["lease_id"], read_renew_action)
 
             with self.assertRaises(relay.RelayError) as missing_epoch:
                 relay.renew_lease(
@@ -601,7 +659,12 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertGreater(renewed["expires_at"], lease["expires_at"])
             with relay.connect(relay_db) as conn:
                 active_count = conn.execute(
-                    "SELECT COUNT(*) FROM leases WHERE project_id = 'renewal' AND state = 'active'"
+                    """
+                    SELECT COUNT(*) FROM leases
+                    WHERE project_id = 'renewal'
+                      AND canonical_resource_id = 'deploy-slot:demo/staging'
+                      AND state = 'active'
+                    """
                 ).fetchone()[0]
                 renewal_events = conn.execute(
                     "SELECT COUNT(*) FROM audit_events WHERE event_type = 'lease.renewed' AND resource_id = 'deploy-slot:demo/staging'"
@@ -624,6 +687,154 @@ class CommonsCoreTests(unittest.TestCase):
                 )
             self.assertEqual(inactive.exception.code, "inactive_lease")
             self.assertEqual(inactive.exception.details["state"], "expired")
+
+    def test_relay_expired_renewal_and_reacquire_are_serialized(self) -> None:
+        from commons import relay
+
+        with tempfile.TemporaryDirectory() as td:
+            relay_db = str(Path(td) / "relay-race.db")
+            relay.register_agent(
+                {"project_id": "renewal-race", "agent_id": "holder", "runtime": "codex"},
+                relay_db,
+            )
+            relay.register_agent(
+                {"project_id": "renewal-race", "agent_id": "contender", "runtime": "claude-code"},
+                relay_db,
+            )
+            lease = relay.acquire_lease(
+                {
+                    "project_id": "renewal-race",
+                    "resource_id": "deploy-slot:demo/staging",
+                    "mode": "exclusive",
+                    "holder_agent_id": "holder",
+                    "ttl": "1m",
+                },
+                relay_db,
+            )
+            with relay.connect(relay_db) as conn, relay.transaction(conn):
+                conn.execute(
+                    "UPDATE leases SET expires_at = ? WHERE lease_id = ?",
+                    (time.time() - 1, lease["lease_id"]),
+                )
+
+            start = threading.Barrier(2)
+
+            def renew_expired() -> tuple[str, str]:
+                start.wait()
+                try:
+                    relay.renew_lease(
+                        lease["lease_id"],
+                        {
+                            "project_id": "renewal-race",
+                            "holder_agent_id": "holder",
+                            "fencing_epoch": lease["fencing_epoch"],
+                            "ttl": "2h",
+                        },
+                        relay_db,
+                    )
+                except relay.RelayDenied as exc:
+                    return "denied", exc.code
+                return "renewed", ""
+
+            def reacquire() -> tuple[str, dict[str, object]]:
+                start.wait()
+                acquired = relay.acquire_lease(
+                    {
+                        "project_id": "renewal-race",
+                        "resource_id": "deploy-slot:demo/staging",
+                        "mode": "exclusive",
+                        "holder_agent_id": "contender",
+                        "ttl": "2h",
+                    },
+                    relay_db,
+                )
+                return "acquired", acquired
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                renew_future = pool.submit(renew_expired)
+                acquire_future = pool.submit(reacquire)
+                renew_result = renew_future.result()
+                acquire_result = acquire_future.result()
+
+            self.assertEqual(renew_result, ("denied", "inactive_lease"))
+            self.assertEqual(acquire_result[0], "acquired")
+            acquired = acquire_result[1]
+            self.assertEqual(acquired["holder_agent_id"], "contender")
+            self.assertGreater(acquired["fencing_epoch"], lease["fencing_epoch"])
+            with relay.connect(relay_db) as conn:
+                active = list(
+                    conn.execute(
+                        "SELECT holder_agent_id FROM leases WHERE project_id = ? AND state = 'active'",
+                        ("renewal-race",),
+                    )
+                )
+            self.assertEqual([row["holder_agent_id"] for row in active], ["contender"])
+
+    def test_remote_acquire_rejects_same_holder_mode_change(self) -> None:
+        from commons import remote
+
+        denied = remote.RemotePolicyDenied(
+            "lease already held by requesting agent",
+            {
+                "resource_id": "db:demo/staging",
+                "mode": "write",
+                "holder_agent_id": "holder",
+                "holder_lease_id": "lease_read",
+                "holder_mode": "read",
+                "holder_fencing_epoch": 0,
+                "requested_ttl_seconds": 3600,
+            },
+            "lease_already_held",
+        )
+        with mock.patch("commons.remote.request", side_effect=denied):
+            with self.assertRaises(remote.RemotePolicyDenied) as raised:
+                remote.acquire_lease(
+                    "work",
+                    "demo",
+                    {
+                        "resource_id": "db:demo/staging",
+                        "mode": "write",
+                        "holder_agent_id": "holder",
+                        "ttl_seconds": 3600,
+                    },
+                )
+        self.assertEqual(raised.exception.code, "lease_mode_change_conflict")
+        self.assertTrue(raised.exception.details["mode_change"])
+        self.assertEqual(len(raised.exception.details["safe_next_actions"]), 1)
+        self.assertNotIn("renew", shlex.split(raised.exception.details["safe_next_actions"][0]))
+
+    def test_remote_acquire_preserves_ttl_seconds_in_renew_action(self) -> None:
+        from commons import remote
+
+        denied = remote.RemotePolicyDenied(
+            "lease already held by requesting agent",
+            {
+                "resource_id": "db:demo/reporting",
+                "mode": "read",
+                "holder_agent_id": "holder",
+                "holder_lease_id": "lease_read",
+                "holder_mode": "read",
+                "holder_fencing_epoch": 0,
+                "requested_ttl_seconds": 3600,
+            },
+            "lease_already_held",
+        )
+        with mock.patch("commons.remote.request", side_effect=denied):
+            with self.assertRaises(remote.RemotePolicyDenied) as raised:
+                remote.acquire_lease(
+                    "work",
+                    "demo",
+                    {
+                        "resource_id": "db:demo/reporting",
+                        "mode": "read",
+                        "holder_agent_id": "holder",
+                        "ttl_seconds": 3600,
+                    },
+                )
+        self.assertEqual(raised.exception.code, "lease_already_held")
+        renew_action = shlex.split(raised.exception.details["safe_next_actions"][0])
+        self.assertEqual(renew_action[:4], ["commons", "remote", "lease", "renew"])
+        self.assertEqual(renew_action[renew_action.index("--ttl") + 1], "3600s")
 
     def test_remote_legacy_inbox_marks_completeness_unknown(self) -> None:
         from commons import remote
@@ -1450,8 +1661,8 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertTrue((paths["claude"] / "SKILL.md").exists())
             installed_skill = (paths["codex"] / "SKILL.md").read_text(encoding="utf-8")
             self.assertIn("scope-first", installed_skill)
-            self.assertIn("pipx install agent-commons==0.3.0", installed_skill)
-            self.assertIn("Commons 0.3.0 or newer is required", installed_skill)
+            self.assertIn("pipx install agent-commons==0.3.1", installed_skill)
+            self.assertIn("Commons 0.3.1 or newer is required", installed_skill)
             self.assertIn("contact_code", installed_skill)
             self.assertIn("Commons scope", installed_skill)
             self.assertIn("scope resolve", installed_skill)
@@ -2258,6 +2469,31 @@ class CommonsCoreTests(unittest.TestCase):
                 self.assertTrue(same_holder_error["details"]["same_holder"])
                 renew_action = shlex.split(same_holder_error["details"]["safe_next_actions"][0])
                 self.assertEqual(renew_action[:4], ["commons", "remote", "lease", "renew"])
+
+                mode_change = run_cli(
+                    home,
+                    "remote",
+                    "lease",
+                    "acquire",
+                    "deploy-slot:demo/staging",
+                    "--mode",
+                    "write",
+                    "--agent",
+                    "agent_a",
+                    "--ttl",
+                    "1h",
+                    check=False,
+                    extra_env=extra_env,
+                )
+                self.assertEqual(mode_change.returncode, 2)
+                mode_change_error = json_stdout(mode_change)
+                self.assertEqual(mode_change_error["error_code"], "lease_mode_change_conflict")
+                self.assertTrue(mode_change_error["details"]["mode_change"])
+                self.assertEqual(len(mode_change_error["details"]["safe_next_actions"]), 1)
+                self.assertNotIn(
+                    "renew",
+                    shlex.split(mode_change_error["details"]["safe_next_actions"][0]),
+                )
 
                 missing_renew_epoch = run_cli(
                     home,
