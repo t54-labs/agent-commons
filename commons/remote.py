@@ -416,6 +416,49 @@ def acquire_lease(remote_name: str, project: str, payload: dict[str, Any]) -> di
         resource_id = str(details.get("resource_id") or payload.get("resource_id") or "the resource")
         requester = str(payload.get("holder_agent_id") or "")
         details["coordination_recipient"] = recipient
+        if str(holder_agent_id) == requester:
+            lease_id = str(details.get("holder_lease_id") or "")
+            fencing_epoch = str(details.get("fencing_epoch") or details.get("holder_fencing_epoch") or "")
+            ttl = str(payload.get("ttl") or "30m")
+            details["same_holder"] = True
+            list_action = shlex.join(
+                [
+                    "commons",
+                    "remote",
+                    "lease",
+                    "list",
+                    "--remote",
+                    remote_name,
+                    "--project",
+                    project,
+                    "--active",
+                ]
+            )
+            details["safe_next_actions"] = [list_action]
+            if lease_id and fencing_epoch:
+                details["safe_next_actions"].insert(
+                    0,
+                    shlex.join(
+                        [
+                            "commons",
+                            "remote",
+                            "lease",
+                            "renew",
+                            lease_id,
+                            "--remote",
+                            remote_name,
+                            "--project",
+                            project,
+                            "--ttl",
+                            ttl,
+                            "--agent",
+                            requester,
+                            "--fencing-epoch",
+                            fencing_epoch,
+                        ]
+                    ),
+                )
+            raise RemotePolicyDenied(str(exc), details, exc.code) from exc
         details["safe_next_actions"] = [
             shlex.join(
                 [
@@ -452,6 +495,27 @@ def acquire_lease(remote_name: str, project: str, payload: dict[str, Any]) -> di
 
 def list_leases(remote_name: str, project: str, active: bool = False) -> list[dict[str, Any]]:
     return request(remote_name, "GET", "/v1/leases", query={"active": str(active).lower()}, project=project)
+
+
+def renew_lease(
+    remote_name: str,
+    project: str,
+    lease_id: str,
+    holder_agent_id: str,
+    fencing_epoch: int,
+    ttl: str,
+) -> dict[str, Any]:
+    return request(
+        remote_name,
+        "POST",
+        f"/v1/leases/{lease_id}/renew",
+        {
+            "holder_agent_id": holder_agent_id,
+            "fencing_epoch": fencing_epoch,
+            "ttl": ttl,
+        },
+        project=project,
+    )
 
 
 def release_lease(

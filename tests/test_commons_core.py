@@ -514,6 +514,117 @@ class CommonsCoreTests(unittest.TestCase):
                 ).fetchone()[0]
             self.assertEqual(release_events, 1)
 
+    def test_relay_lease_renewal_is_atomic_and_fenced(self) -> None:
+        from commons import relay
+
+        with tempfile.TemporaryDirectory() as td:
+            relay_db = str(Path(td) / "relay.db")
+            relay.register_agent({"project_id": "renewal", "agent_id": "holder", "runtime": "codex"}, relay_db)
+            relay.register_agent({"project_id": "renewal", "agent_id": "other", "runtime": "claude-code"}, relay_db)
+            lease = relay.acquire_lease(
+                {
+                    "project_id": "renewal",
+                    "resource_id": "deploy-slot:demo/staging",
+                    "mode": "exclusive",
+                    "holder_agent_id": "holder",
+                    "ttl": "1m",
+                },
+                relay_db,
+            )
+
+            with self.assertRaises(relay.RelayDenied) as already_held:
+                relay.acquire_lease(
+                    {
+                        "project_id": "renewal",
+                        "resource_id": "DEPLOY-SLOT:demo//staging/",
+                        "mode": "exclusive",
+                        "holder_agent_id": "holder",
+                        "ttl": "2h",
+                    },
+                    relay_db,
+                )
+            self.assertEqual(already_held.exception.code, "lease_already_held")
+            self.assertTrue(already_held.exception.details["same_holder"])
+            renew_action = shlex.split(already_held.exception.details["safe_next_actions"][0])
+            self.assertEqual(renew_action[:4], ["commons", "remote", "lease", "renew"])
+            self.assertIn(str(lease["fencing_epoch"]), renew_action)
+
+            with self.assertRaises(relay.RelayError) as missing_epoch:
+                relay.renew_lease(
+                    lease["lease_id"],
+                    {
+                        "project_id": "renewal",
+                        "holder_agent_id": "holder",
+                        "ttl": "2h",
+                    },
+                    relay_db,
+                )
+            self.assertEqual(missing_epoch.exception.code, "fencing_epoch_required")
+
+            with self.assertRaises(relay.RelayDenied):
+                relay.renew_lease(
+                    lease["lease_id"],
+                    {
+                        "project_id": "renewal",
+                        "holder_agent_id": "other",
+                        "fencing_epoch": lease["fencing_epoch"],
+                        "ttl": "2h",
+                    },
+                    relay_db,
+                )
+            with self.assertRaises(relay.RelayDenied) as stale_epoch:
+                relay.renew_lease(
+                    lease["lease_id"],
+                    {
+                        "project_id": "renewal",
+                        "holder_agent_id": "holder",
+                        "fencing_epoch": lease["fencing_epoch"] + 1,
+                        "ttl": "2h",
+                    },
+                    relay_db,
+                )
+            self.assertEqual(stale_epoch.exception.code, "stale_fencing_epoch")
+
+            renewed = relay.renew_lease(
+                lease["lease_id"],
+                {
+                    "project_id": "renewal",
+                    "holder_agent_id": "holder",
+                    "fencing_epoch": lease["fencing_epoch"],
+                    "ttl": "2h",
+                },
+                relay_db,
+            )
+            self.assertEqual(renewed["lease_id"], lease["lease_id"])
+            self.assertEqual(renewed["fencing_epoch"], lease["fencing_epoch"])
+            self.assertEqual(renewed["ttl_seconds"], 7200)
+            self.assertGreater(renewed["expires_at"], lease["expires_at"])
+            with relay.connect(relay_db) as conn:
+                active_count = conn.execute(
+                    "SELECT COUNT(*) FROM leases WHERE project_id = 'renewal' AND state = 'active'"
+                ).fetchone()[0]
+                renewal_events = conn.execute(
+                    "SELECT COUNT(*) FROM audit_events WHERE event_type = 'lease.renewed' AND resource_id = 'deploy-slot:demo/staging'"
+                ).fetchone()[0]
+                conn.execute("UPDATE leases SET expires_at = ? WHERE lease_id = ?", (time.time() - 1, lease["lease_id"]))
+                conn.commit()
+            self.assertEqual(active_count, 1)
+            self.assertEqual(renewal_events, 1)
+
+            with self.assertRaises(relay.RelayDenied) as inactive:
+                relay.renew_lease(
+                    lease["lease_id"],
+                    {
+                        "project_id": "renewal",
+                        "holder_agent_id": "holder",
+                        "fencing_epoch": lease["fencing_epoch"],
+                        "ttl": "2h",
+                    },
+                    relay_db,
+                )
+            self.assertEqual(inactive.exception.code, "inactive_lease")
+            self.assertEqual(inactive.exception.details["state"], "expired")
+
     def test_remote_legacy_inbox_marks_completeness_unknown(self) -> None:
         from commons import remote
 
@@ -2126,6 +2237,52 @@ class CommonsCoreTests(unittest.TestCase):
                         extra_env=extra_env,
                     )
                 )
+                same_holder = run_cli(
+                    home,
+                    "remote",
+                    "lease",
+                    "acquire",
+                    "DEPLOY-SLOT:demo//staging/",
+                    "--mode",
+                    "exclusive",
+                    "--agent",
+                    "agent_a",
+                    "--ttl",
+                    "2m",
+                    check=False,
+                    extra_env=extra_env,
+                )
+                self.assertEqual(same_holder.returncode, 2)
+                same_holder_error = json_stdout(same_holder)
+                self.assertEqual(same_holder_error["error_code"], "lease_already_held")
+                self.assertTrue(same_holder_error["details"]["same_holder"])
+                renew_action = shlex.split(same_holder_error["details"]["safe_next_actions"][0])
+                self.assertEqual(renew_action[:4], ["commons", "remote", "lease", "renew"])
+
+                missing_renew_epoch = run_cli(
+                    home,
+                    "remote",
+                    "lease",
+                    "renew",
+                    lease_a["lease_id"],
+                    "--agent",
+                    "agent_a",
+                    "--ttl",
+                    "2m",
+                    check=False,
+                    extra_env=extra_env,
+                )
+                self.assertEqual(missing_renew_epoch.returncode, 1)
+                missing_renew_error = json_stdout(missing_renew_epoch)
+                self.assertEqual(missing_renew_error["error_code"], "fencing_epoch_required")
+                self.assertIn("lease list", missing_renew_error["remediation"])
+
+                renewed = json_stdout(run_cli(home, *renew_action[1:], extra_env=extra_env))
+                self.assertEqual(renewed["lease_id"], lease_a["lease_id"])
+                self.assertEqual(renewed["fencing_epoch"], lease_a["fencing_epoch"])
+                self.assertGreater(renewed["expires_at"], lease_a["expires_at"])
+                self.assertEqual(renewed["ttl_seconds"], 120)
+
                 denied = run_cli(
                     home,
                     "remote",
@@ -2172,6 +2329,21 @@ class CommonsCoreTests(unittest.TestCase):
                 self.assertEqual(invalid_resource.returncode, 1)
                 invalid_resource_error = json_stdout(invalid_resource)
                 self.assertEqual(invalid_resource_error["error_code"], "invalid_resource_id")
+                missing_release_epoch = run_cli(
+                    home,
+                    "remote",
+                    "lease",
+                    "release",
+                    lease_a["lease_id"],
+                    "--agent",
+                    "agent_a",
+                    check=False,
+                    extra_env=extra_env,
+                )
+                self.assertEqual(missing_release_epoch.returncode, 1)
+                missing_release_error = json_stdout(missing_release_epoch)
+                self.assertEqual(missing_release_error["error_code"], "fencing_epoch_required")
+                self.assertIn("stale holder", missing_release_error["remediation"])
                 released = json_stdout(
                     run_cli(
                         home,
