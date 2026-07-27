@@ -1229,13 +1229,26 @@ def lease_conflicts(existing_mode: str, requested_mode: str) -> bool:
     return existing_mode not in LEASE_COMPAT.get(requested_mode, set())
 
 
+def lease_ttl_seconds(payload: dict[str, Any]) -> int:
+    try:
+        ttl_seconds = int(payload.get("ttl_seconds") or seconds_from_ttl(payload.get("ttl")))
+    except (TypeError, ValueError) as exc:
+        raise RelayError(
+            f"invalid lease ttl: {payload.get('ttl') or payload.get('ttl_seconds')}",
+            code="invalid_lease_ttl",
+        ) from exc
+    if ttl_seconds <= 0:
+        raise RelayError("lease ttl must be greater than zero", code="invalid_lease_ttl")
+    return ttl_seconds
+
+
 def acquire_lease(payload: dict[str, Any], db: str | None = None) -> dict[str, Any]:
     project_id = required(payload, "project_id")
     resource_id = required(payload, "resource_id")
     mode = payload.get("mode") or "write"
     if mode not in LEASE_COMPAT:
         raise RelayError(f"invalid lease mode: {mode}")
-    ttl_seconds = int(payload.get("ttl_seconds") or seconds_from_ttl(payload.get("ttl")))
+    ttl_seconds = lease_ttl_seconds(payload)
     holder = required(payload, "holder_agent_id")
     with connect(db) as conn, transaction(conn):
         registered = conn.execute(
@@ -1277,6 +1290,7 @@ def acquire_lease(payload: dict[str, Any], db: str | None = None) -> dict[str, A
                 "holder_contact_code": holder_contact_code,
                 "holder_lease_id": conflict["lease_id"],
                 "holder_mode": conflict["mode"],
+                "holder_fencing_epoch": conflict["fencing_epoch"],
                 "expires_at": conflict["expires_at"],
                 "coordination_recipient": coordination_recipient,
                 "safe_next_actions": [
@@ -1311,7 +1325,33 @@ def acquire_lease(payload: dict[str, Any], db: str | None = None) -> dict[str, A
                     ),
                 ],
             }
+            if conflict["holder_agent_id"] == holder:
+                details["same_holder"] = True
+                details["safe_next_actions"] = [
+                    shlex.join(
+                        [
+                            "commons",
+                            "remote",
+                            "lease",
+                            "renew",
+                            conflict["lease_id"],
+                            "--remote",
+                            "default",
+                            "--project",
+                            project_id,
+                            "--ttl",
+                            str(payload.get("ttl") or "30m"),
+                            "--agent",
+                            holder,
+                            "--fencing-epoch",
+                            str(conflict["fencing_epoch"]),
+                        ]
+                    ),
+                    details["safe_next_actions"][1],
+                ]
             audit(conn, "lease.denied", details, project_id, holder, resource_id)
+            if details.get("same_holder"):
+                raise RelayDenied("lease already held by requesting agent", details, code="lease_already_held")
             raise RelayDenied("lease conflict", details, code="lease_conflict")
         epoch = int(resource["fencing_epoch"])
         if mode in FENCED_LEASE_MODES:
@@ -1371,6 +1411,79 @@ def list_leases(project_id: str, active_only: bool = False, db: str | None = Non
         return [row_to_dict(row) for row in rows]
 
 
+def renew_lease(
+    lease_id: str,
+    payload: dict[str, Any],
+    db: str | None = None,
+) -> dict[str, Any]:
+    project_id = required(payload, "project_id")
+    holder_agent_id = required(payload, "holder_agent_id")
+    fencing_epoch = payload.get("fencing_epoch")
+    if fencing_epoch is None:
+        raise RelayError(
+            "fencing_epoch is required to renew a lease",
+            code="fencing_epoch_required",
+            details={"lease_id": lease_id, "operation": "renew"},
+            remediation="List active leases and retry with the exact fencing_epoch for this lease.",
+        )
+    ttl_seconds = lease_ttl_seconds(payload)
+    with connect(db) as conn, transaction(conn):
+        row = conn.execute(
+            "SELECT * FROM leases WHERE project_id = ? AND lease_id = ?",
+            (project_id, lease_id),
+        ).fetchone()
+        if not row:
+            raise RelayError(f"unknown lease: {lease_id}")
+        if not row["holder_agent_id"] or holder_agent_id != row["holder_agent_id"]:
+            raise RelayDenied("lease holder mismatch", {"lease_id": lease_id})
+        if int(fencing_epoch) != int(row["fencing_epoch"]):
+            raise RelayDenied(
+                "stale fencing epoch",
+                {"lease_id": lease_id, "expected_fencing_epoch": row["fencing_epoch"]},
+                code="stale_fencing_epoch",
+            )
+        expire_leases(conn, project_id, row["canonical_resource_id"])
+        row = conn.execute("SELECT * FROM leases WHERE lease_id = ?", (lease_id,)).fetchone()
+        if row["state"] != "active":
+            raise RelayDenied(
+                "cannot renew inactive lease",
+                {"lease_id": lease_id, "state": row["state"]},
+                code="inactive_lease",
+            )
+        previous_expires_at = float(row["expires_at"])
+        expires_at = now_ts() + ttl_seconds
+        touch_agent(conn, project_id, holder_agent_id)
+        conn.execute(
+            "UPDATE leases SET expires_at = ? WHERE lease_id = ? AND state = 'active'",
+            (expires_at, lease_id),
+        )
+        audit(
+            conn,
+            "lease.renewed",
+            {
+                "lease_id": lease_id,
+                "resource_id": row["resource_id"],
+                "fencing_epoch": row["fencing_epoch"],
+                "previous_expires_at": previous_expires_at,
+                "expires_at": expires_at,
+                "ttl_seconds": ttl_seconds,
+            },
+            project_id,
+            holder_agent_id,
+            row["resource_id"],
+        )
+        updated = conn.execute("SELECT * FROM leases WHERE lease_id = ?", (lease_id,)).fetchone()
+    result = row_to_dict(updated)
+    result.update(
+        {
+            "ok": True,
+            "previous_expires_at": previous_expires_at,
+            "ttl_seconds": ttl_seconds,
+        }
+    )
+    return result
+
+
 def release_lease(
     lease_id: str,
     holder_agent_id: str | None = None,
@@ -1389,7 +1502,12 @@ def release_lease(
         if not row["holder_agent_id"] or holder_agent_id != row["holder_agent_id"]:
             raise RelayDenied("lease holder mismatch", {"lease_id": lease_id})
         if fencing_epoch is None:
-            raise RelayError("fencing_epoch is required", code="fencing_epoch_required")
+            raise RelayError(
+                "fencing_epoch is required to release a lease",
+                code="fencing_epoch_required",
+                details={"lease_id": lease_id, "operation": "release"},
+                remediation="List active leases and retry with the exact fencing_epoch for this lease.",
+            )
         if int(fencing_epoch) != int(row["fencing_epoch"]):
             raise RelayDenied(
                 "stale fencing epoch",
@@ -1452,6 +1570,7 @@ def relay_status(project_id: str, db: str | None = None) -> dict[str, Any]:
             "message_receipts": True,
             "sequence_cursor": True,
             "fenced_release": True,
+            "fenced_renewal": True,
             "remote_tasks": True,
             "console": True,
         },
@@ -2887,6 +3006,10 @@ class RelayHandler(BaseHTTPRequestHandler):
                         payload.get("fencing_epoch"),
                     ),
                 )
+                return
+            if parsed.path.startswith("/v1/leases/") and parsed.path.endswith("/renew"):
+                lease_id = parsed.path.split("/")[3]
+                self._send(200, renew_lease(lease_id, payload, self._db()))
                 return
             self._send(404, {"error": "not found"})
         except RelayDenied as exc:

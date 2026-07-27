@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import subprocess
 import sys
 import time
@@ -296,12 +297,27 @@ def build_parser() -> argparse.ArgumentParser:
     remote_lease_list.add_argument("--remote", default="default")
     remote_lease_list.add_argument("--project")
     remote_lease_list.add_argument("--active", action="store_true")
+    remote_lease_renew = remote_lease_sub.add_parser("renew")
+    remote_lease_renew.add_argument("lease_id")
+    remote_lease_renew.add_argument("--remote", default="default")
+    remote_lease_renew.add_argument("--project")
+    remote_lease_renew.add_argument("--ttl", default="30m")
+    remote_lease_renew.add_argument("--agent", required=True)
+    remote_lease_renew.add_argument(
+        "--fencing-epoch",
+        type=int,
+        help="Exact epoch returned by acquire or lease list; required to reject stale holders.",
+    )
     remote_lease_release = remote_lease_sub.add_parser("release")
     remote_lease_release.add_argument("lease_id")
     remote_lease_release.add_argument("--remote", default="default")
     remote_lease_release.add_argument("--project")
     remote_lease_release.add_argument("--agent", required=True)
-    remote_lease_release.add_argument("--fencing-epoch", type=int, required=True)
+    remote_lease_release.add_argument(
+        "--fencing-epoch",
+        type=int,
+        help="Exact epoch returned by acquire or lease list; required to reject stale holders.",
+    )
 
     remote_task = remote_sub.add_parser("task")
     remote_task_sub = remote_task.add_subparsers(dest="remote_task_cmd", required=True)
@@ -591,6 +607,39 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def require_remote_fencing_epoch(args: argparse.Namespace, project: str) -> int:
+    if args.fencing_epoch is not None:
+        return int(args.fencing_epoch)
+    list_command = shlex.join(
+        [
+            "commons",
+            "remote",
+            "lease",
+            "list",
+            "--remote",
+            args.remote,
+            "--project",
+            project,
+            "--active",
+            "--json",
+        ]
+    )
+    operation = str(args.remote_lease_cmd)
+    raise remote.RemoteClientError(
+        f"remote lease {operation} requires --fencing-epoch <epoch> for {args.lease_id}",
+        code="fencing_epoch_required",
+        details={
+            "lease_id": args.lease_id,
+            "operation": operation,
+            "safe_next_actions": [list_command],
+        },
+        remediation=(
+            f"Run `{list_command}`, find this lease, and pass its `fencing_epoch`. "
+            "The epoch prevents a stale holder from renewing or releasing a newer lease."
+        ),
+    )
+
+
 def command(args: argparse.Namespace) -> tuple[Any, int]:
     if args.cmd == "version":
         return {"version": __version__}, 0
@@ -759,14 +808,26 @@ def command(args: argparse.Namespace) -> tuple[Any, int]:
             if args.remote_lease_cmd == "list":
                 project = remote.project_arg(args.remote, args.project)
                 return remote.list_leases(args.remote, project, args.active), 0
+            if args.remote_lease_cmd == "renew":
+                project = remote.project_arg(args.remote, args.project)
+                fencing_epoch = require_remote_fencing_epoch(args, project)
+                return remote.renew_lease(
+                    args.remote,
+                    project,
+                    args.lease_id,
+                    args.agent,
+                    fencing_epoch,
+                    args.ttl,
+                ), 0
             if args.remote_lease_cmd == "release":
                 project = remote.project_arg(args.remote, args.project)
+                fencing_epoch = require_remote_fencing_epoch(args, project)
                 return remote.release_lease(
                     args.remote,
                     project,
                     args.lease_id,
                     args.agent,
-                    args.fencing_epoch,
+                    fencing_epoch,
                 ), 0
         if args.remote_cmd == "task":
             project = remote.project_arg(args.remote, args.project)
