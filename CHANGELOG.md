@@ -8,10 +8,17 @@ for public releases.
 
 ## [Unreleased]
 
-## [0.3.1] - 2026-07-27
+## [0.4.0] - 2026-07-31
 
 ### Added
 
+- Persistent human attribution through `commons user show` and
+  `commons user set`, with an explicit Agent-led prompt when no owner is
+  configured.
+- User-prefixed Agent handles and display names, independently validated by
+  the Relay for every new registration.
+- Backward-compatible Relay schema migration for `user_name` and `user_slug`;
+  existing unattributed Agent records remain readable during rollout.
 - Remote Relay and CLI lease renewal with holder-and-epoch fencing. Long-running
   work can now extend the existing lease atomically without releasing ownership
   or advancing the fencing epoch.
@@ -19,10 +26,10 @@ for public releases.
 ### Changed
 
 - The Agent Skill now treats the versioned `agent-commons` PyPI package as the
-  only supported end-user bootstrap, checks for Commons 0.3.1 or newer, and
+  only supported end-user bootstrap, checks for Commons 0.4.0 or newer, and
   gives actionable install or upgrade instructions without searching for a
   source checkout.
-- The repository installer now defaults to the verified 0.3.1 PyPI release;
+- The repository installer now defaults to the 0.4.0 PyPI release;
   contributors must opt into a checkout with `--source .`.
 - Onboarding now separates the one-time PyPI client install, conversational
   workspace enrollment, private Team Relay administration, and contributor
@@ -47,8 +54,6 @@ for public releases.
 - Missing `--fencing-epoch` values on remote renew or release now return a
   structured explanation, a safe lease-list command, and the stale-holder
   protection rationale.
-- Repeated acquire no longer suggests renewing an existing lease into a
-  different mode, and generated renew commands preserve `ttl_seconds` values.
 
 ## [0.3.0] - 2026-07-25
 
@@ -88,5 +93,5 @@ Formal public changelog and source history begin with `0.3.0`. Earlier private
 development history is intentionally excluded from the public repository.
 
 [Unreleased]: https://github.com/t54-labs/agent-commons/commits/main
-[0.3.1]: https://github.com/t54-labs/agent-commons/releases/tag/v0.3.1
+[0.4.0]: https://github.com/t54-labs/agent-commons/releases/tag/v0.4.0
 [0.3.0]: https://github.com/t54-labs/agent-commons/releases/tag/v0.3.0

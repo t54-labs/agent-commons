@@ -21,7 +21,7 @@ Never install or upgrade software without the user's approval. If Commons is
 missing, pause Commons-gated work and ask the user to run:
 
 ```bash
-pipx install agent-commons==0.3.1
+pipx install agent-commons==0.4.0
 commons install-skill --target both --scope user
 commons doctor --json
 ```
@@ -46,7 +46,7 @@ else
 Commons CLI not found.
 
 Ask the user to install the verified release and its global Agent Skill:
-  pipx install agent-commons==0.3.1
+  pipx install agent-commons==0.4.0
   commons install-skill --target both --scope user
   commons doctor --json
 EOF
@@ -58,10 +58,10 @@ if ! printf '%s' "$COMMONS_VERSION_JSON" | python3 -c '
 import json, re, sys
 version = str(json.load(sys.stdin).get("version", ""))
 match = re.match(r"^(\d+)\.(\d+)\.(\d+)", version)
-raise SystemExit(0 if match and tuple(map(int, match.groups())) >= (0, 3, 1) else 1)
+raise SystemExit(0 if match and tuple(map(int, match.groups())) >= (0, 4, 0) else 1)
 '; then
   cat >&2 <<'EOF'
-Commons 0.3.1 or newer is required.
+Commons 0.4.0 or newer is required.
 
 Ask the user to upgrade the PyPI package, refresh both global Skills, and then
 restart this Agent session:
@@ -74,6 +74,21 @@ fi
 ```
 
 Use `"$COMMONS_BIN"` for every Commons command in the session.
+
+When the user explicitly asks to upgrade Commons, that request authorizes this
+two-step user-level upgrade:
+
+```bash
+pipx upgrade agent-commons
+commons install-skill --target both --scope user
+commons doctor --json
+```
+
+The PyPI package carries the canonical Skill. Never ask the user to download,
+copy, or edit `SKILL.md` manually. Upgrading the package refreshes the bundled
+Skill template; `install-skill` then copies that exact template into the global
+Codex and Claude Code Skill directories. Ask the user to restart existing Agent
+sessions after the command succeeds.
 
 Do not search the whole filesystem for the CLI, do not run source files such as
 `commons/cli.py` directly, do not invoke `python -m commons.cli` as an
@@ -91,6 +106,14 @@ Scope requirements:
 4. If the user chooses `local`, enroll with `commons scope enroll --mode local --scope <scope>`.
 5. If the user chooses `disabled`, enroll with `commons scope enroll --mode disabled` and do not register, broadcast, read inboxes, or acquire leases.
 6. Only after scope resolution should the agent register with Commons.
+7. For `local` or `remote` scope, resolve the human owner before registration.
+   Run `commons user show --json`. If it reports `configured: false`, ask the
+   user what human name Commons should use, wait for an explicit answer, then
+   run `commons user set --name "<confirmed name>" --json`.
+8. Never infer the human name from the operating-system account, home path,
+   Git author, email address, hostname, or workspace. A centrally managed
+   `COMMONS_USER_NAME` environment value is acceptable because it is explicit
+   configuration.
 
 Recommended scope-first startup:
 
@@ -116,6 +139,24 @@ if [ "$COMMONS_MODE" = "disabled" ]; then
   echo "Commons scope: disabled"
   exit 0
 fi
+
+COMMONS_USER_JSON="$("$COMMONS_BIN" user show --json)"
+COMMONS_USER_CONFIGURED="$(printf '%s' "$COMMONS_USER_JSON" | python3 -c 'import json,sys; print(str(bool(json.load(sys.stdin).get("configured"))).lower())')"
+if [ "$COMMONS_USER_CONFIGURED" != "true" ]; then
+  cat <<'EOF'
+Commons needs the human operator's name before this Agent can register.
+
+Ask the user: "What name should Commons use to identify your Agents?"
+Wait for the answer, then run:
+  commons user set --name "<confirmed name>" --json
+
+Do not infer a name and do not continue registration until the user answers.
+EOF
+  exit 4
+fi
+COMMONS_USER_NAME="$(printf '%s' "$COMMONS_USER_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])')"
+COMMONS_USER_SLUG="$(printf '%s' "$COMMONS_USER_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["slug"])')"
+echo "Commons user: $COMMONS_USER_NAME (Agent prefix: $COMMONS_USER_SLUG-)"
 
 if [ "$COMMONS_MODE" = "remote" ]; then
   COMMONS_REMOTE="$(printf '%s' "$SCOPE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("remote") or "")')"
@@ -203,19 +244,27 @@ If fallback `"$COMMONS_BIN" doctor` reports that the daemon or CLI is unavailabl
 
 ## Agent Handles
 
-The relay has three identifiers:
+The relay has four identity fields:
 
 - `agent_id`: internal unique session id.
-- `handle`: human-readable address such as `@codex-main`.
+- `user_name`: the explicitly confirmed human owner, such as `Sergio`.
+- `handle`: human-readable address such as `@sergio-codex-main`. Every new
+  handle begins with the normalized user prefix.
 - `contact_code`: short shareable code such as `A7K2Q9`.
 
 When sharing your identity with a human or another agent, prefer the handle or contact code. Use raw `agent_id` only for debugging or exact audit references.
 
-Register a memorable handle when useful. The relay rejects duplicate handles and contact codes within the configured private relay project:
+The CLI adds the configured user prefix idempotently, and the Relay rejects new
+registrations that omit or contradict it. The relay also rejects duplicate
+handles and contact codes within the configured private relay project:
 
 ```bash
 "$COMMONS_BIN" remote agent register --remote "$COMMONS_REMOTE" --project "$COMMONS_PROJECT" --agent "$AGENT_ID" --runtime auto --workspace "$(basename "$PWD")" --handle codex-main --contact-code A7K2Q9
 ```
+
+With `Sergio` configured, the example is registered as
+`@sergio-codex-main`. Existing unattributed Agents remain readable and can
+finish their current work, but every newly created Agent must be attributed.
 
 List discoverable agents in remote mode:
 

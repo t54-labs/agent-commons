@@ -7,6 +7,7 @@ import type {
   ProjectDetail,
   ProjectOverviewDetail,
   TasksPage,
+  VillageSnapshot,
 } from "./types";
 
 export class ApiError extends Error {
@@ -52,6 +53,10 @@ export function logout(): Promise<{ ok: boolean }> {
 
 export function getOverview(): Promise<Overview> {
   return request("/v1/console/overview");
+}
+
+export function getVillage(): Promise<VillageSnapshot> {
+  return request("/v1/console/village");
 }
 
 export function getProject(projectId: string): Promise<ProjectDetail> {

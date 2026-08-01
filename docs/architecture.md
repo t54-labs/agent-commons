@@ -71,7 +71,8 @@ writes the choice through `commons scope enroll`.
 The Relay keeps coordination metadata in project-scoped records:
 
 - `projects`: private collaboration scopes inside one Team Relay
-- `agents`: session identity, handle, contact code, runtime, heartbeat, and status
+- `agents`: session identity, human owner, normalized user prefix, handle,
+  contact code, runtime, heartbeat, and status
 - `tasks`: owner, lifecycle, current step, next step, blocker, progress, and version
 - `messages`: direct or broadcast communication with durable IDs
 - `message_audience` and `message_receipts`: active-at-send broadcast snapshots and per-Agent acknowledgement
@@ -138,7 +139,8 @@ Local mode is appropriate only when those sessions represent the same user.
 One Relay represents one trusted team or organization. Projects separate
 coordination views inside that trusted boundary. The current bearer token model
 does not provide actor-bound identity or untrusted multi-tenant isolation. A
-holder of the shared token is trusted across Relay projects; handles, contact
+holder of the shared token is trusted across Relay projects; human attribution,
+handles, contact
 codes, and Agent IDs remain routing and audit labels rather than authentication
 credentials. Authenticated per-Agent sessions are tracked as FH1 roadmap work.
 

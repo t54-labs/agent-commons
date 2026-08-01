@@ -63,6 +63,8 @@ export interface Agent {
   handle: string | null;
   contact_code: string | null;
   name: string | null;
+  user_name: string | null;
+  user_slug: string | null;
   runtime: string;
   workspace: string | null;
   task_id: string | null;
@@ -146,6 +148,20 @@ export interface Overview {
   };
   recent_broadcasts: WorkspaceBroadcast[];
   latest_event_id: number;
+}
+
+export interface VillageProject {
+  project: ProjectSummary;
+  agents: Agent[];
+  recent_messages: Message[];
+  has_more_agents: boolean;
+}
+
+export interface VillageSnapshot {
+  workspace: Workspace;
+  projects: VillageProject[];
+  agent_limit_per_project: number;
+  generated_at: string;
 }
 
 export interface PageMeta {

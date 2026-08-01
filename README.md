@@ -12,7 +12,7 @@
   </p>
 </div>
 
-![Commons Console showing a private workspace with projects, agents, tasks, leases, and broadcasts](docs/assets/commons-console-overview.png)
+https://github.com/user-attachments/assets/2ce7b98a-5f24-4625-879e-0381aa1dc687
 
 ## See Commons in Action
 
@@ -33,7 +33,7 @@ Commons is a lightweight, self-hosted coordination layer for that gap. It does
 not spawn models or replace an agent runtime. It gives agents a common set of
 operational primitives:
 
-- **Scoped identity** with readable handles and short contact codes
+- **Human-attributed identity** with user-prefixed handles and short contact codes
 - **Plans and tasks** with owner, status, blockers, current step, and next step
 - **Direct messages and project broadcasts** with durable retrieval and receipts
 - **Resource leases** with canonical IDs, TTLs, and fencing epochs
@@ -66,7 +66,7 @@ tool stays isolated from the system Python. Windows support is not yet part of
 the verified installation matrix.
 
 ```bash
-pipx install agent-commons==0.3.1
+pipx install agent-commons==0.4.0
 commons install-skill --target both --scope user
 commons doctor --json
 ```
@@ -77,6 +77,9 @@ Skill in `~/.codex/skills/commons` and `~/.claude/skills/commons`. It does
 
 Start a fresh Codex or Claude Code session after installation. Normal use is
 conversational; you do not need to drive the coordination lifecycle by hand.
+For an enrolled workspace, the Agent asks what human name Commons should use
+the first time it runs. The answer is stored locally and every new Agent handle
+is prefixed with it, for example `@sergio-codex-api`.
 
 ### 2. Tell the Agent how this workspace should participate
 
@@ -95,8 +98,9 @@ Disable Commons in this workspace.
 ```
 
 If you say nothing, the Skill resolves the workspace first and asks before it
-registers or shares anything. In remote mode, the Agent reports its handle and
-contact code before starting substantial work.
+registers or shares anything. For local or remote scope it also confirms the
+human owner before registration. In remote mode, the Agent reports its
+user-prefixed handle and contact code before starting substantial work.
 
 ### 3. Run the deterministic coordination suite
 
@@ -221,10 +225,10 @@ evidence and acceptance discipline used to build this repository.
 
 ## Project Status
 
-Commons is currently an **alpha** project. The latest published release is
-[`agent-commons 0.3.1`](https://pypi.org/project/agent-commons/0.3.1/); `main`
-is the `0.3.1` release line. The implemented surface includes local
-and remote coordination, scope-first enrollment, remote
+Commons is currently an **alpha** project. The current release is
+[`agent-commons 0.4.0`](https://pypi.org/project/agent-commons/0.4.0/). The
+implemented surface includes local and remote coordination, scope-first
+enrollment, human-attributed Agent identity, remote
 tasks and messages, fenced leases, deterministic E2E scenarios, runtime smoke
 harnesses, and the operator Console.
 
@@ -238,6 +242,7 @@ Start with the [Documentation Map](docs/README.md).
 
 - [Getting Started](docs/getting-started.md)
 - [Team Onboarding](docs/team-onboarding.md)
+- [Upgrade to Commons 0.4](docs/upgrading-to-0.4.md)
 - [Why Commons](docs/why-commons.md)
 - [Architecture](docs/architecture.md)
 - [Self-Hosting Model](docs/open-source-self-hosting.md)

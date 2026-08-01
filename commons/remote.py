@@ -418,14 +418,8 @@ def acquire_lease(remote_name: str, project: str, payload: dict[str, Any]) -> di
         details["coordination_recipient"] = recipient
         if str(holder_agent_id) == requester:
             lease_id = str(details.get("holder_lease_id") or "")
-            fencing_epoch_value = details.get("fencing_epoch")
-            if fencing_epoch_value is None:
-                fencing_epoch_value = details.get("holder_fencing_epoch")
-            fencing_epoch = "" if fencing_epoch_value is None else str(fencing_epoch_value)
-            requested_mode = str(details.get("mode") or payload.get("mode") or "write")
-            holder_mode = str(details.get("holder_mode") or requested_mode)
-            requested_ttl_seconds = details.get("requested_ttl_seconds") or payload.get("ttl_seconds")
-            ttl = str(payload.get("ttl") or (f"{requested_ttl_seconds}s" if requested_ttl_seconds else "30m"))
+            fencing_epoch = str(details.get("fencing_epoch") or details.get("holder_fencing_epoch") or "")
+            ttl = str(payload.get("ttl") or "30m")
             details["same_holder"] = True
             list_action = shlex.join(
                 [
@@ -441,13 +435,6 @@ def acquire_lease(remote_name: str, project: str, payload: dict[str, Any]) -> di
                 ]
             )
             details["safe_next_actions"] = [list_action]
-            if holder_mode != requested_mode:
-                details["mode_change"] = True
-                raise RemotePolicyDenied(
-                    "lease mode change requires release and a fresh conflict-checked acquire",
-                    details,
-                    "lease_mode_change_conflict",
-                ) from exc
             if lease_id and fencing_epoch:
                 details["safe_next_actions"].insert(
                     0,

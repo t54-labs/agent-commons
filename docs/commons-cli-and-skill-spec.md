@@ -6,7 +6,7 @@ End-user installation is provided by the `agent-commons` PyPI distribution.
 The source repository is not part of the runtime lookup path.
 
 ```bash
-pipx install agent-commons==0.3.1
+pipx install agent-commons==0.4.0
 commons install-skill --target both --scope user
 ```
 
@@ -38,6 +38,16 @@ User config:
 ~/.commons/config.toml
 ```
 
+Human attribution profile:
+
+```text
+~/.commons/user.json
+```
+
+The attribution profile is written atomically with mode `0600`. It contains
+the explicitly confirmed display name and its normalized Agent-handle prefix.
+`COMMONS_USER_NAME` may override the file on centrally managed machines.
+
 Project config:
 
 ```text
@@ -64,10 +74,6 @@ host = "127.0.0.1"
 port = 8765
 state_path = "~/.commons/state/commons.db"
 artifact_path = "~/.commons/artifacts"
-
-[identity]
-default_runtime = "auto"
-agent_name = "developer-local"
 
 [policy]
 default_lease_ttl = "30m"
@@ -255,7 +261,7 @@ Remote broadcast, discovery, inbox, and lease visibility are scoped to the confi
 
 Remote lease resources use `<namespace>:<canonical-target>` and should normally encode `<scope>/<name>` in the target. Namespace characters are lowercase letters, digits, and hyphens. The relay applies Unicode compatibility normalization, lowercases ids, converts backslashes to slashes, removes duplicate separators and `.` segments, strips trailing separators, and rejects bare names, whitespace, and `..` traversal. This makes common spelling variants contend on one canonical key. It is deliberately only lexical normalization: semantic aliases, Git repository identity, and filesystem case sensitivity require the FH4 resource registry and are not guessed.
 
-Remote acquire requires a registered `--agent`. Fencing-capable modes (`write`, `exclusive`, and `maintenance`) advance the resource epoch; observational modes (`observe` and `read`) retain the current epoch so they do not fence an active writer. Renew and release require `lease_id`, the exact holder, and the lease's `fencing_epoch`. Renew atomically resets expiry to Relay time plus the requested TTL while preserving the lease id, mode, and epoch; it cannot revive an expired or released lease. A repeated acquire by the same holder and in the same mode returns `lease_already_held` with a safe renew command that preserves the requested TTL. A mode change is an explicit `lease_mode_change_conflict`; the holder must release and perform a fresh conflict-checked acquire instead of renewing different protection. A repeated valid release is idempotent and does not append a duplicate release audit event.
+Remote acquire requires a registered `--agent`. Fencing-capable modes (`write`, `exclusive`, and `maintenance`) advance the resource epoch; observational modes (`observe` and `read`) retain the current epoch so they do not fence an active writer. Renew and release require `lease_id`, the exact holder, and the lease's `fencing_epoch`. Renew atomically resets expiry to Relay time plus the requested TTL while preserving the lease id and epoch; it cannot revive an expired or released lease. A repeated acquire by the same holder returns `lease_already_held` with a safe renew command. A repeated valid release is idempotent and does not append a duplicate release audit event.
 
 ### `commons scope`
 
@@ -303,6 +309,7 @@ Checks:
 - optional daemon status
 - Codex skill installation status
 - Claude Code skill installation status
+- configured human owner and normalized Agent prefix
 - `codex` and `claude` runtime command availability
 - hooks installed when hook adapters are configured
 - current repo detected
@@ -360,9 +367,29 @@ Claude project scope: <project>/.claude/skills/commons
 
 The installed Skill prefers the `commons` executable already present in `PATH`
 and uses the stable shim as a fallback. It rejects CLI versions older than
-0.3.0. Agents must not search the filesystem for `commons/cli.py`, invoke source
+0.4.0. Agents must not search the filesystem for `commons/cli.py`, invoke source
 files directly, install packages without user approval, or write Board files
 directly. The Skill does not require MCP.
+
+### `commons user`
+
+```bash
+commons user show --json
+commons user set --name "Sergio" --json
+```
+
+`user show` is read-only and reports whether the human owner has been
+configured. `user set` normalizes and persists the explicit answer. For any
+workspace enrolled as `local` or `remote`, the Skill must ask the user when the
+profile is missing and must not register until the user answers. It must not
+infer identity from local account metadata.
+
+The CLI prefixes both the Agent handle and display name idempotently. With
+`Sergio` configured, `--handle codex-api` becomes `sergio-codex-api` and
+`--name reviewer` becomes `Sergio-reviewer`. The Relay independently requires
+`user_name` and the corresponding handle prefix for every new Agent. Existing
+legacy Agent records remain readable and can re-register without attribution
+until they migrate through a 0.4.0 client.
 
 ### `commons agent`
 

@@ -72,13 +72,27 @@ There is no public project directory and no global Agent discovery.
 Each developer runs:
 
 ```bash
-pipx install agent-commons==0.3.1
+pipx install agent-commons==0.4.0
 commons install-skill --target both --scope user
 commons doctor --json
 ```
 
 This makes Commons available to future Codex and Claude Code sessions on that
 machine. It does not join the Relay yet.
+
+The package carries the canonical Skill, so teammates never copy or edit
+`SKILL.md` by hand. The first fresh Agent session in a `local` or `remote`
+workspace asks the teammate what human name Commons should use. That answer is
+stored only on the teammate's machine and prefixes every new Agent handle. An
+operator may preconfigure managed machines with:
+
+```bash
+commons user set --name "<human name>" --json
+```
+
+Do not derive this value from an email address, operating-system account, Git
+author, or hostname. `COMMONS_USER_NAME` is available for explicit centrally
+managed configuration.
 
 ## 4. Store the Relay Credential Locally
 
@@ -174,7 +188,7 @@ deployment or database write.
 
 ## 7. Membership Changes and Token Rotation
 
-Because 0.3.x uses a shared Team token, removing one member requires rotating
+Because the current Relay uses a shared Team token, removing one member requires rotating
 the Relay credential for the entire trust domain:
 
 1. pause high-risk shared operations
@@ -189,17 +203,31 @@ credentials. Deleting or renaming them does not revoke Relay access.
 
 ## 8. Upgrade the Team
 
-Pin one tested Commons version across the team. On each client:
+The Relay cannot and must not rewrite Skills on teammates' machines. Roll out a
+new identity-enforcing release in this order:
+
+1. Publish the tested `agent-commons` package to PyPI.
+2. Upgrade the CLI and both global Skills on every client.
+3. Restart Agent sessions and verify or configure the human owner.
+4. Back up and deploy the upgraded Relay.
+5. Run the remote acceptance test before resuming shared side effects.
+
+On each client:
 
 ```bash
 pipx upgrade agent-commons
 commons install-skill --target both --scope user
+commons version --json
 commons doctor --json
+commons user show --json
 ```
 
-Restart active Agent sessions after the Skill refresh. Upgrade and back up the
-Relay under a maintenance window, then run the remote acceptance test before
-resuming shared side effects.
+For release 0.4.0, `commons version` must report `0.4.0`, both user-level Skill
+entries in `doctor` must be up to date, and `user show` must report
+`configured: true` before the Relay enforcement step. Existing unattributed
+Agent records remain readable and may finish current work; every new Agent
+registration is rejected until it supplies the configured human owner and a
+matching user-prefixed handle.
 
 The PyPI distribution is independent of the source checkout. Operators who
 build the Relay from source should track the canonical public repository at

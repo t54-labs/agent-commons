@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -14,6 +15,60 @@ from commons import relay  # noqa: E402
 
 
 DB_PATH = Path("/tmp/commons-console-e2e.db")
+DEMO_USER_NAME = "Sergio"
+DEMO_USER_PREFIX = "sergio-"
+
+
+def attributed_handle(handle: str) -> str:
+    return handle if handle.startswith(DEMO_USER_PREFIX) else f"{DEMO_USER_PREFIX}{handle}"
+
+LIVE_DEMO_AGENTS = (
+    ("commons-team", "agent_codex_console", "busy"),
+    ("commons-team", "agent_claude_relay", "busy"),
+    ("commons-team", "agent_claude_docs", "idle"),
+    ("platform-api", "agent_codex_platform", "busy"),
+)
+
+MANY_PROJECT_AGENTS = (
+    ("identity-edge", "agent_identity_edge", "codex", "identity-edge", "ID7E21", "busy"),
+    ("wallet-mobile", "agent_wallet_mobile", "claude-code", "wallet-mobile", "WM8B42", "idle"),
+    ("payments-core", "agent_payments_core", "codex", "payments-core", "PC5D72", "busy"),
+    ("developer-platform", "agent_developer_platform", "claude-code", "developer-platform", "DP9F31", "idle"),
+    ("risk-engine", "agent_risk_engine", "codex", "risk-engine", "RE7P22", "busy"),
+    ("growth-automation", "agent_growth_automation", "claude-code", "growth-automation", "GA4K66", "idle"),
+    ("release-ops", "agent_release_ops", "codex", "release-ops", "RO6M83", "busy"),
+)
+
+LIVE_DEMO_MESSAGES = (
+    {
+        "project_id": "commons-team",
+        "sender_agent_id": "agent_codex_console",
+        "recipient": "broadcast",
+        "message_type": "status",
+        "body": "LIVE: polishing the pixel village and checking the responsive Console.",
+    },
+    {
+        "project_id": "commons-team",
+        "sender_agent_id": "agent_claude_relay",
+        "recipient": "@sergio-codex-console",
+        "message_type": "review",
+        "body": "The Relay stream is healthy. I am checking the next activity event now.",
+    },
+    {
+        "project_id": "commons-team",
+        "sender_agent_id": "agent_claude_docs",
+        "recipient": "broadcast",
+        "message_type": "status",
+        "body": "Docs are aligned with the current onboarding and private Relay model.",
+    },
+    {
+        "project_id": "platform-api",
+        "sender_agent_id": "agent_codex_platform",
+        "recipient": "broadcast",
+        "message_type": "status",
+        "body": "Staging smoke checks are running against the latest API build.",
+    },
+)
 
 
 def iso_ago(minutes: int) -> str:
@@ -85,8 +140,24 @@ def seed() -> None:
         }
         for index in range(55)
     )
+    if os.environ.get("COMMONS_FIXTURE_MANY_PROJECTS", "").lower() in {"1", "true", "yes"}:
+        agents.extend(
+            {
+                "project_id": project_id,
+                "agent_id": agent_id,
+                "runtime": runtime,
+                "handle": handle,
+                "contact_code": contact_code,
+                "name": handle.replace("-", " ").title(),
+                "workspace": project_id,
+            }
+            for project_id, agent_id, runtime, handle, contact_code, _status in MANY_PROJECT_AGENTS
+        )
     for agent in agents:
-        relay.register_agent(agent, str(DB_PATH))
+        attributed_agent = dict(agent)
+        attributed_agent["user_name"] = DEMO_USER_NAME
+        attributed_agent["handle"] = attributed_handle(str(agent["handle"]))
+        relay.register_agent(attributed_agent, str(DB_PATH))
 
     architecture = relay.create_remote_task(
         {
@@ -166,7 +237,7 @@ def seed() -> None:
         {
             "project_id": "commons-team",
             "sender_agent_id": "agent_claude_relay",
-            "recipient": "@codex-console",
+            "recipient": "@sergio-codex-console",
             "message_type": "review",
             "body": "The session-cookie boundary looks sound. Please verify SSE reconnect before rollout.",
         },
@@ -247,9 +318,38 @@ def seed() -> None:
         )
 
 
+def run_live_demo() -> None:
+    interval = max(4.0, float(os.environ.get("COMMONS_FIXTURE_LIVE_DEMO_INTERVAL", "12")))
+    message_index = 0
+    demo_agents = list(LIVE_DEMO_AGENTS)
+    if os.environ.get("COMMONS_FIXTURE_MANY_PROJECTS", "").lower() in {"1", "true", "yes"}:
+        demo_agents.extend(
+            (project_id, agent_id, status)
+            for project_id, agent_id, _runtime, _handle, _contact_code, status in MANY_PROJECT_AGENTS
+        )
+    while True:
+        try:
+            for project_id, agent_id, status in demo_agents:
+                relay.heartbeat_agent(
+                    {
+                        "project_id": project_id,
+                        "agent_id": agent_id,
+                        "status": status,
+                    },
+                    str(DB_PATH),
+                )
+            relay.send_message(LIVE_DEMO_MESSAGES[message_index % len(LIVE_DEMO_MESSAGES)], str(DB_PATH))
+            message_index += 1
+        except Exception as exc:  # pragma: no cover - local preview diagnostics only
+            print(f"Live demo update failed: {exc}", file=sys.stderr)
+        time.sleep(interval)
+
+
 if __name__ == "__main__":
     os.environ["COMMONS_RELAY_TOKEN"] = "relay-e2e-token"
     os.environ["COMMONS_CONSOLE_TOKEN"] = "console-e2e-token"
     os.environ["COMMONS_WORKSPACE_NAME"] = "T54 Agent Workspace"
     seed()
+    if os.environ.get("COMMONS_FIXTURE_LIVE_DEMO", "").lower() in {"1", "true", "yes"}:
+        threading.Thread(target=run_live_demo, name="commons-live-demo", daemon=True).start()
     relay.serve(host="127.0.0.1", port=8766, db=str(DB_PATH))

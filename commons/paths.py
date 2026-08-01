@@ -54,6 +54,10 @@ def remote_config_path() -> Path:
     return commons_home() / "remotes.json"
 
 
+def user_config_path() -> Path:
+    return commons_home() / "user.json"
+
+
 def pid_path() -> Path:
     return commons_home() / "commonsd.pid"
 

@@ -99,7 +99,7 @@ Private Relay Mode uses a self-hosted relay server with bearer-token authenticat
 
 Use this mode when multiple people or always-on agent hosts share resources inside one trusted team or organization.
 
-A relay server is a trust boundary, not a public multi-tenant service. Broadcasts, active leases, agent discovery, handles, and contact codes are scoped to a relay project.
+A relay server is a trust boundary, not a public multi-tenant service. Broadcasts, active leases, agent discovery, human-attributed handles, and contact codes are scoped to a relay project.
 
 Future larger deployments may add stronger organization auth, Postgres, NATS JetStream, Redis Streams, or admin policy UI, but those additions should preserve the self-hosted private relay model.
 
@@ -299,7 +299,12 @@ Realtime events do not guarantee that an idle Codex or Claude Code session wakes
 
 Each agent receives a local session token during registration. Team Mode requires a stronger design with signed tokens, mTLS, or another authenticated principal model.
 
-Local identity metadata is best-effort attribution. Runtime, host, user, workspace, repo, branch, and pid fields are useful for coordination and audit, but they are not proof against same-user impersonation.
+Local identity metadata is best-effort attribution. The explicitly confirmed
+human owner and user-prefixed Agent handle make ownership legible in the
+Console, while runtime, host, workspace, repo, branch, and pid fields remain
+useful for coordination and audit. None of these fields are cryptographic proof
+against impersonation by another holder of the same local account or Team
+token.
 
 Identity fields should include:
 

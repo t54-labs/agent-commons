@@ -17,7 +17,16 @@ from typing import Any
 from . import __version__
 from . import board
 from .db import connect, init_db, transaction
-from .paths import artifact_dir, bin_dir, board_dir, config_path, db_path, ensure_base_dirs, runtime_tests_dir
+from .paths import (
+    artifact_dir,
+    bin_dir,
+    board_dir,
+    config_path,
+    db_path,
+    ensure_base_dirs,
+    runtime_tests_dir,
+    user_config_path,
+)
 from .util import (
     current_pid,
     hash_event,
@@ -149,6 +158,7 @@ def install_skill(target: str = "both", scope: str = "user", project_dir: str | 
 
 def doctor(fix: bool = False, project_dir: str | None = None) -> dict[str, Any]:
     project = Path(project_dir or os.getcwd()).resolve()
+    from . import identity
     from . import scope as scope_config
 
     resolved_scope = scope_config.resolve(str(project))
@@ -231,6 +241,19 @@ def doctor(fix: bool = False, project_dir: str | None = None) -> dict[str, Any]:
     )
     errors: list[str] = []
     warnings: list[str] = []
+    try:
+        user_identity = identity.load_profile()
+    except CommonsError as exc:
+        user_identity = {
+            "configured": False,
+            "name": None,
+            "slug": None,
+            "error": str(exc),
+            "config": str(user_config_path()),
+        }
+        errors.append(str(exc))
+    if not user_identity["configured"]:
+        warnings.append('Commons user identity is not configured; run commons user set --name "<name>"')
     if local_state_required and missing_board_dirs:
         errors.append(f"missing board directories: {', '.join(missing_board_dirs)}")
     for runtime, check in runtime_checks.items():
@@ -259,6 +282,7 @@ def doctor(fix: bool = False, project_dir: str | None = None) -> dict[str, Any]:
         "mode": "filesystem-first",
         "mcp_required": False,
         "scope": resolved_scope,
+        "user": user_identity,
         "config": str(config_path()),
         "db": {"path": str(db_path()), "exists": db_path().exists()},
         "board": {
@@ -361,9 +385,12 @@ def prepare_runtime_smoke(
     scenario: str = "skill-handshake",
     project_dir: str | None = None,
 ) -> dict[str, Any]:
+    from . import identity
+
     if scenario != "skill-handshake":
         raise CommonsError(f"unknown runtime smoke scenario: {scenario}")
     initialize()
+    profile = identity.require_profile()
     runtimes = [item.strip() for item in agents.split(",") if item.strip()]
     while len(runtimes) < 2:
         runtimes.append("custom")
@@ -371,8 +398,8 @@ def prepare_runtime_smoke(
     suffix = run_id.split("_", 1)[1][:8]
     resource_id = f"env:fixture/runtime-{suffix}"
     project = Path(project_dir or os.getcwd()).resolve()
-    agent_a_name = f"runtime-a-{suffix}"
-    agent_b_name = f"runtime-b-{suffix}"
+    agent_a_name = identity.qualify_name(profile, f"runtime-a-{suffix}")
+    agent_b_name = identity.qualify_name(profile, f"runtime-b-{suffix}")
     root = runtime_tests_dir() / run_id
     root.mkdir(parents=True, exist_ok=True)
     prompts = {
