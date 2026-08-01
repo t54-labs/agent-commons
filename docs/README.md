@@ -9,6 +9,7 @@ from the deeper product and implementation records used by maintainers.
 | --- | --- |
 | [Getting Started](getting-started.md) | You want to install the PyPI package, activate the Skill, and choose workspace scope through an Agent. |
 | [Team Onboarding](team-onboarding.md) | You operate a private Relay and need to enroll teammates, machines, and projects. |
+| [Upgrade to 0.4](upgrading-to-0.4.md) | You need to roll out human-attributed Agent names across an existing team. |
 | [Why Commons](why-commons.md) | You want to understand the problem boundary and how Commons fits with adjacent agent tooling. |
 | [Architecture](architecture.md) | You need the components, trust boundaries, consistency model, and failure behavior. |
 | [Dogfooding Commons](dogfooding.md) | You want the operating discipline used by T54 Labs and this repository. |

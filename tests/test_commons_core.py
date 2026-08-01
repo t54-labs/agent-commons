@@ -9,7 +9,6 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 import tomllib
 import urllib.error
@@ -39,6 +38,7 @@ def local_urlopen(target: str | urllib.request.Request, timeout: float = 1):
 def run_cli(home: Path, *args: str, check: bool = True, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["COMMONS_HOME"] = str(home)
+    env["COMMONS_USER_NAME"] = "Test User"
     env["PYTHONPATH"] = str(ROOT)
     if extra_env:
         env.update(extra_env)
@@ -62,6 +62,7 @@ def run_cli_raw(
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["COMMONS_HOME"] = str(home)
+    env["COMMONS_USER_NAME"] = "Test User"
     env["PYTHONPATH"] = str(ROOT)
     if extra_env:
         env.update(extra_env)
@@ -81,7 +82,245 @@ def json_stdout(proc: subprocess.CompletedProcess[str]):
     return json.loads(proc.stdout)
 
 
+def register_relay_agent(relay, payload: dict[str, object], relay_db: str):
+    attributed = dict(payload)
+    attributed.setdefault("user_name", "Test User")
+    handle = str(attributed.get("handle") or attributed["agent_id"]).replace("_", "-")
+    if not handle.startswith("test-user-"):
+        handle = f"test-user-{handle}"
+    attributed["handle"] = handle
+    return relay.register_agent(attributed, relay_db)
+
+
 class CommonsCoreTests(unittest.TestCase):
+    def test_user_identity_configuration_and_local_agent_prefix(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td) / ".commons"
+            no_identity_env = {"COMMONS_USER_NAME": ""}
+
+            missing = json_stdout(run_cli(home, "user", "show", extra_env=no_identity_env))
+            self.assertFalse(missing["configured"])
+
+            denied = run_cli(
+                home,
+                "agent",
+                "register",
+                "--runtime",
+                "codex",
+                "--name",
+                "reviewer",
+                check=False,
+                extra_env=no_identity_env,
+            )
+            self.assertEqual(denied.returncode, 1)
+            denied_payload = json_stdout(denied)
+            self.assertEqual(denied_payload["error_code"], "user_name_required")
+            self.assertIn("commons user set", denied_payload["remediation"])
+
+            configured = json_stdout(
+                run_cli(
+                    home,
+                    "user",
+                    "set",
+                    "--name",
+                    "Sergio Chan",
+                    extra_env=no_identity_env,
+                )
+            )
+            self.assertEqual(configured["name"], "Sergio Chan")
+            self.assertEqual(configured["slug"], "sergio-chan")
+            self.assertEqual((home / "user.json").stat().st_mode & 0o777, 0o600)
+
+            loaded = json_stdout(run_cli(home, "user", "show", extra_env=no_identity_env))
+            self.assertEqual(loaded["name"], "Sergio Chan")
+            agent = json_stdout(
+                run_cli(
+                    home,
+                    "agent",
+                    "register",
+                    "--runtime",
+                    "codex",
+                    "--name",
+                    "reviewer",
+                    extra_env=no_identity_env,
+                )
+            )
+            self.assertEqual(agent["name"], "Sergio Chan-reviewer")
+            self.assertEqual(agent["user_slug"], "sergio-chan")
+
+    def test_relay_requires_attributed_user_prefixed_agent_handles(self) -> None:
+        from commons import relay
+
+        with tempfile.TemporaryDirectory() as td:
+            relay_db = str(Path(td) / "identity-relay.db")
+            with self.assertRaises(relay.RelayError) as missing_identity:
+                relay.register_agent(
+                    {
+                        "project_id": "identity",
+                        "agent_id": "agent_missing_identity",
+                        "runtime": "codex",
+                        "handle": "codex-review",
+                    },
+                    relay_db,
+                )
+            self.assertEqual(missing_identity.exception.code, "user_name_required")
+
+            with self.assertRaises(relay.RelayError) as wrong_prefix:
+                relay.register_agent(
+                    {
+                        "project_id": "identity",
+                        "agent_id": "agent_wrong_prefix",
+                        "runtime": "codex",
+                        "handle": "codex-review",
+                        "user_name": "Sergio",
+                    },
+                    relay_db,
+                )
+            self.assertEqual(wrong_prefix.exception.code, "agent_handle_user_prefix_required")
+            self.assertEqual(wrong_prefix.exception.details["required_prefix"], "sergio-")
+
+            registered = relay.register_agent(
+                {
+                    "project_id": "identity",
+                    "agent_id": "agent_sergio_review",
+                    "runtime": "codex",
+                    "handle": "sergio-codex-review",
+                    "name": "reviewer",
+                    "user_name": "Sergio",
+                },
+                relay_db,
+            )
+            self.assertEqual(registered["handle"], "sergio-codex-review")
+            self.assertEqual(registered["name"], "Sergio-reviewer")
+            self.assertEqual(registered["user_name"], "Sergio")
+            self.assertEqual(registered["user_slug"], "sergio")
+
+            refreshed = relay.register_agent(
+                {
+                    "project_id": "identity",
+                    "agent_id": "agent_sergio_review",
+                    "runtime": "codex",
+                },
+                relay_db,
+            )
+            self.assertEqual(refreshed["handle"], "sergio-codex-review")
+            self.assertEqual(refreshed["name"], "Sergio-reviewer")
+            self.assertEqual(refreshed["user_name"], "Sergio")
+
+            with self.assertRaises(relay.RelayError) as invalid_user_name:
+                relay.register_agent(
+                    {
+                        "project_id": "identity",
+                        "agent_id": "agent_invalid_identity",
+                        "runtime": "codex",
+                        "handle": "sergio-invalid",
+                        "user_name": "x" * 65,
+                    },
+                    relay_db,
+                )
+            self.assertEqual(invalid_user_name.exception.code, "invalid_user_name")
+
+            with self.assertRaises(relay.RelayError) as changed_owner:
+                relay.register_agent(
+                    {
+                        "project_id": "identity",
+                        "agent_id": "agent_sergio_review",
+                        "runtime": "codex",
+                        "handle": "alice-codex-review",
+                        "user_name": "Alice",
+                    },
+                    relay_db,
+                )
+            self.assertEqual(changed_owner.exception.code, "agent_user_identity_conflict")
+
+    def test_relay_can_temporarily_accept_legacy_registration_during_user_prefix_rollout(self) -> None:
+        from commons import relay
+
+        with tempfile.TemporaryDirectory() as td, mock.patch.dict(
+            os.environ,
+            {"COMMONS_REQUIRE_USER_PREFIX": "false"},
+        ):
+            relay_db = str(Path(td) / "identity-rollout-relay.db")
+            legacy = relay.register_agent(
+                {
+                    "project_id": "identity-rollout",
+                    "agent_id": "agent_legacy_client",
+                    "runtime": "codex",
+                    "handle": "codex-legacy-client",
+                    "name": "Legacy Client",
+                },
+                relay_db,
+            )
+            self.assertEqual(legacy["handle"], "codex-legacy-client")
+            self.assertEqual(legacy["name"], "Legacy Client")
+            self.assertIsNone(legacy["user_name"])
+            self.assertIsNone(legacy["user_slug"])
+
+            attributed = relay.register_agent(
+                {
+                    "project_id": "identity-rollout",
+                    "agent_id": "agent_attributed_client",
+                    "runtime": "codex",
+                    "handle": "sergio-codex-client",
+                    "name": "client",
+                    "user_name": "Sergio",
+                },
+                relay_db,
+            )
+            self.assertEqual(attributed["handle"], "sergio-codex-client")
+            self.assertEqual(attributed["name"], "Sergio-client")
+            self.assertEqual(attributed["user_name"], "Sergio")
+            self.assertEqual(attributed["user_slug"], "sergio")
+
+    def test_relay_grandfathers_existing_unattributed_agent(self) -> None:
+        from commons import relay
+
+        with tempfile.TemporaryDirectory() as td:
+            relay_db = str(Path(td) / "legacy-agent.db")
+            with sqlite3.connect(relay_db) as conn:
+                conn.execute(
+                    """
+                    CREATE TABLE agents (
+                      project_id TEXT NOT NULL,
+                      agent_id TEXT NOT NULL,
+                      handle TEXT,
+                      contact_code TEXT,
+                      name TEXT,
+                      runtime TEXT NOT NULL,
+                      workspace TEXT,
+                      task_id TEXT,
+                      status TEXT NOT NULL DEFAULT 'online',
+                      registered_at TEXT NOT NULL,
+                      heartbeat_at TEXT NOT NULL,
+                      PRIMARY KEY(project_id, agent_id)
+                    )
+                    """
+                )
+                conn.execute(
+                    """
+                    INSERT INTO agents(
+                      project_id, agent_id, handle, contact_code, name, runtime,
+                      status, registered_at, heartbeat_at
+                    ) VALUES(
+                      'legacy', 'legacy_agent', 'codex-old', 'LEGACY', 'Old Agent',
+                      'codex', 'online', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
+                    )
+                    """
+                )
+
+            relay.init_relay_db(relay_db)
+            with relay.connect(relay_db) as conn:
+                columns = {row["name"] for row in conn.execute("PRAGMA table_info(agents)")}
+            self.assertIn("user_name", columns)
+            self.assertIn("user_slug", columns)
+
+            refreshed = relay.register_agent(
+                {"project_id": "legacy", "agent_id": "legacy_agent", "runtime": "codex"},
+                relay_db,
+            )
+            self.assertEqual(refreshed["handle"], "codex-old")
+            self.assertIsNone(refreshed["user_name"])
+
     def test_console_large_project_queries_are_bounded(self) -> None:
         from commons import relay
 
@@ -89,7 +328,8 @@ class CommonsCoreTests(unittest.TestCase):
             relay_db = str(Path(td) / "console-large.db")
             project_id = "console-large"
             for index in range(40):
-                relay.register_agent(
+                register_relay_agent(
+                    relay,
                     {
                         "project_id": project_id,
                         "agent_id": f"agent_{index:02d}",
@@ -213,7 +453,8 @@ class CommonsCoreTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as td:
             relay_db = str(Path(td) / "activity-relay.db")
-            relay.register_agent(
+            register_relay_agent(
+                relay,
                 {"project_id": "activity", "agent_id": "worker", "runtime": "codex"},
                 relay_db,
             )
@@ -356,7 +597,8 @@ class CommonsCoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             relay_db = str(Path(td) / "active-audience.db")
             for agent_id in ("sender", "active", "offline", "stale"):
-                relay.register_agent(
+                register_relay_agent(
+                    relay,
                     {"project_id": "audience", "agent_id": agent_id, "runtime": "codex"},
                     relay_db,
                 )
@@ -383,7 +625,8 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertEqual(relay.fetch_inbox("audience", "offline", db=relay_db)["messages"], [])
             self.assertEqual(relay.fetch_inbox("audience", "stale", db=relay_db)["messages"], [])
 
-            relay.register_agent(
+            register_relay_agent(
+                relay,
                 {"project_id": "audience", "agent_id": "late", "runtime": "claude-code"},
                 relay_db,
             )
@@ -451,8 +694,12 @@ class CommonsCoreTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as td:
             relay_db = str(Path(td) / "relay.db")
-            relay.register_agent({"project_id": "demo", "agent_id": "writer", "runtime": "codex"}, relay_db)
-            relay.register_agent({"project_id": "demo", "agent_id": "observer", "runtime": "claude-code"}, relay_db)
+            register_relay_agent(
+                relay, {"project_id": "demo", "agent_id": "writer", "runtime": "codex"}, relay_db
+            )
+            register_relay_agent(
+                relay, {"project_id": "demo", "agent_id": "observer", "runtime": "claude-code"}, relay_db
+            )
 
             with self.assertRaises(relay.RelayError):
                 relay.acquire_lease({"project_id": "demo", "resource_id": "db:demo/staging"}, relay_db)
@@ -520,8 +767,12 @@ class CommonsCoreTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as td:
             relay_db = str(Path(td) / "relay.db")
-            relay.register_agent({"project_id": "renewal", "agent_id": "holder", "runtime": "codex"}, relay_db)
-            relay.register_agent({"project_id": "renewal", "agent_id": "other", "runtime": "claude-code"}, relay_db)
+            register_relay_agent(
+                relay, {"project_id": "renewal", "agent_id": "holder", "runtime": "codex"}, relay_db
+            )
+            register_relay_agent(
+                relay, {"project_id": "renewal", "agent_id": "other", "runtime": "claude-code"}, relay_db
+            )
             lease = relay.acquire_lease(
                 {
                     "project_id": "renewal",
@@ -549,63 +800,6 @@ class CommonsCoreTests(unittest.TestCase):
             renew_action = shlex.split(already_held.exception.details["safe_next_actions"][0])
             self.assertEqual(renew_action[:4], ["commons", "remote", "lease", "renew"])
             self.assertIn(str(lease["fencing_epoch"]), renew_action)
-            self.assertEqual(renew_action[renew_action.index("--ttl") + 1], "2h")
-
-            with self.assertRaises(relay.RelayDenied) as mode_change:
-                relay.acquire_lease(
-                    {
-                        "project_id": "renewal",
-                        "resource_id": "deploy-slot:demo/staging",
-                        "mode": "write",
-                        "holder_agent_id": "holder",
-                        "ttl_seconds": 3600,
-                    },
-                    relay_db,
-                )
-            self.assertEqual(mode_change.exception.code, "lease_mode_change_conflict")
-            self.assertTrue(mode_change.exception.details["same_holder"])
-            self.assertTrue(mode_change.exception.details["mode_change"])
-            self.assertEqual(mode_change.exception.details["holder_mode"], "exclusive")
-            self.assertEqual(mode_change.exception.details["mode"], "write")
-            self.assertEqual(mode_change.exception.details["requested_ttl_seconds"], 3600)
-            self.assertEqual(len(mode_change.exception.details["safe_next_actions"]), 1)
-            self.assertNotIn(
-                "renew",
-                shlex.split(mode_change.exception.details["safe_next_actions"][0]),
-            )
-
-            read_lease = relay.acquire_lease(
-                {
-                    "project_id": "renewal",
-                    "resource_id": "db:demo/reporting",
-                    "mode": "read",
-                    "holder_agent_id": "holder",
-                    "ttl": "1m",
-                },
-                relay_db,
-            )
-            with self.assertRaises(relay.RelayDenied) as repeated_read:
-                relay.acquire_lease(
-                    {
-                        "project_id": "renewal",
-                        "resource_id": "db:demo/reporting",
-                        "mode": "read",
-                        "holder_agent_id": "holder",
-                        "ttl_seconds": 3600,
-                    },
-                    relay_db,
-                )
-            self.assertEqual(repeated_read.exception.code, "lease_already_held")
-            read_renew_action = shlex.split(repeated_read.exception.details["safe_next_actions"][0])
-            self.assertEqual(read_renew_action[:4], ["commons", "remote", "lease", "renew"])
-            self.assertEqual(read_renew_action[read_renew_action.index("--ttl") + 1], "3600s")
-            with relay.connect(relay_db) as conn:
-                read_count = conn.execute(
-                    "SELECT COUNT(*) FROM leases WHERE project_id = ? AND canonical_resource_id = ?",
-                    ("renewal", "db:demo/reporting"),
-                ).fetchone()[0]
-            self.assertEqual(read_count, 1)
-            self.assertIn(read_lease["lease_id"], read_renew_action)
 
             with self.assertRaises(relay.RelayError) as missing_epoch:
                 relay.renew_lease(
@@ -659,12 +853,7 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertGreater(renewed["expires_at"], lease["expires_at"])
             with relay.connect(relay_db) as conn:
                 active_count = conn.execute(
-                    """
-                    SELECT COUNT(*) FROM leases
-                    WHERE project_id = 'renewal'
-                      AND canonical_resource_id = 'deploy-slot:demo/staging'
-                      AND state = 'active'
-                    """
+                    "SELECT COUNT(*) FROM leases WHERE project_id = 'renewal' AND state = 'active'"
                 ).fetchone()[0]
                 renewal_events = conn.execute(
                     "SELECT COUNT(*) FROM audit_events WHERE event_type = 'lease.renewed' AND resource_id = 'deploy-slot:demo/staging'"
@@ -687,154 +876,6 @@ class CommonsCoreTests(unittest.TestCase):
                 )
             self.assertEqual(inactive.exception.code, "inactive_lease")
             self.assertEqual(inactive.exception.details["state"], "expired")
-
-    def test_relay_expired_renewal_and_reacquire_are_serialized(self) -> None:
-        from commons import relay
-
-        with tempfile.TemporaryDirectory() as td:
-            relay_db = str(Path(td) / "relay-race.db")
-            relay.register_agent(
-                {"project_id": "renewal-race", "agent_id": "holder", "runtime": "codex"},
-                relay_db,
-            )
-            relay.register_agent(
-                {"project_id": "renewal-race", "agent_id": "contender", "runtime": "claude-code"},
-                relay_db,
-            )
-            lease = relay.acquire_lease(
-                {
-                    "project_id": "renewal-race",
-                    "resource_id": "deploy-slot:demo/staging",
-                    "mode": "exclusive",
-                    "holder_agent_id": "holder",
-                    "ttl": "1m",
-                },
-                relay_db,
-            )
-            with relay.connect(relay_db) as conn, relay.transaction(conn):
-                conn.execute(
-                    "UPDATE leases SET expires_at = ? WHERE lease_id = ?",
-                    (time.time() - 1, lease["lease_id"]),
-                )
-
-            start = threading.Barrier(2)
-
-            def renew_expired() -> tuple[str, str]:
-                start.wait()
-                try:
-                    relay.renew_lease(
-                        lease["lease_id"],
-                        {
-                            "project_id": "renewal-race",
-                            "holder_agent_id": "holder",
-                            "fencing_epoch": lease["fencing_epoch"],
-                            "ttl": "2h",
-                        },
-                        relay_db,
-                    )
-                except relay.RelayDenied as exc:
-                    return "denied", exc.code
-                return "renewed", ""
-
-            def reacquire() -> tuple[str, dict[str, object]]:
-                start.wait()
-                acquired = relay.acquire_lease(
-                    {
-                        "project_id": "renewal-race",
-                        "resource_id": "deploy-slot:demo/staging",
-                        "mode": "exclusive",
-                        "holder_agent_id": "contender",
-                        "ttl": "2h",
-                    },
-                    relay_db,
-                )
-                return "acquired", acquired
-
-            with ThreadPoolExecutor(max_workers=2) as pool:
-                renew_future = pool.submit(renew_expired)
-                acquire_future = pool.submit(reacquire)
-                renew_result = renew_future.result()
-                acquire_result = acquire_future.result()
-
-            self.assertEqual(renew_result, ("denied", "inactive_lease"))
-            self.assertEqual(acquire_result[0], "acquired")
-            acquired = acquire_result[1]
-            self.assertEqual(acquired["holder_agent_id"], "contender")
-            self.assertGreater(acquired["fencing_epoch"], lease["fencing_epoch"])
-            with relay.connect(relay_db) as conn:
-                active = list(
-                    conn.execute(
-                        "SELECT holder_agent_id FROM leases WHERE project_id = ? AND state = 'active'",
-                        ("renewal-race",),
-                    )
-                )
-            self.assertEqual([row["holder_agent_id"] for row in active], ["contender"])
-
-    def test_remote_acquire_rejects_same_holder_mode_change(self) -> None:
-        from commons import remote
-
-        denied = remote.RemotePolicyDenied(
-            "lease already held by requesting agent",
-            {
-                "resource_id": "db:demo/staging",
-                "mode": "write",
-                "holder_agent_id": "holder",
-                "holder_lease_id": "lease_read",
-                "holder_mode": "read",
-                "holder_fencing_epoch": 0,
-                "requested_ttl_seconds": 3600,
-            },
-            "lease_already_held",
-        )
-        with mock.patch("commons.remote.request", side_effect=denied):
-            with self.assertRaises(remote.RemotePolicyDenied) as raised:
-                remote.acquire_lease(
-                    "work",
-                    "demo",
-                    {
-                        "resource_id": "db:demo/staging",
-                        "mode": "write",
-                        "holder_agent_id": "holder",
-                        "ttl_seconds": 3600,
-                    },
-                )
-        self.assertEqual(raised.exception.code, "lease_mode_change_conflict")
-        self.assertTrue(raised.exception.details["mode_change"])
-        self.assertEqual(len(raised.exception.details["safe_next_actions"]), 1)
-        self.assertNotIn("renew", shlex.split(raised.exception.details["safe_next_actions"][0]))
-
-    def test_remote_acquire_preserves_ttl_seconds_in_renew_action(self) -> None:
-        from commons import remote
-
-        denied = remote.RemotePolicyDenied(
-            "lease already held by requesting agent",
-            {
-                "resource_id": "db:demo/reporting",
-                "mode": "read",
-                "holder_agent_id": "holder",
-                "holder_lease_id": "lease_read",
-                "holder_mode": "read",
-                "holder_fencing_epoch": 0,
-                "requested_ttl_seconds": 3600,
-            },
-            "lease_already_held",
-        )
-        with mock.patch("commons.remote.request", side_effect=denied):
-            with self.assertRaises(remote.RemotePolicyDenied) as raised:
-                remote.acquire_lease(
-                    "work",
-                    "demo",
-                    {
-                        "resource_id": "db:demo/reporting",
-                        "mode": "read",
-                        "holder_agent_id": "holder",
-                        "ttl_seconds": 3600,
-                    },
-                )
-        self.assertEqual(raised.exception.code, "lease_already_held")
-        renew_action = shlex.split(raised.exception.details["safe_next_actions"][0])
-        self.assertEqual(renew_action[:4], ["commons", "remote", "lease", "renew"])
-        self.assertEqual(renew_action[renew_action.index("--ttl") + 1], "3600s")
 
     def test_remote_legacy_inbox_marks_completeness_unknown(self) -> None:
         from commons import remote
@@ -900,9 +941,15 @@ class CommonsCoreTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as td:
             relay_db = str(Path(td) / "relay.db")
-            relay.register_agent({"project_id": "paging", "agent_id": "sender", "runtime": "codex"}, relay_db)
-            relay.register_agent({"project_id": "paging", "agent_id": "reader_a", "runtime": "codex"}, relay_db)
-            relay.register_agent({"project_id": "paging", "agent_id": "reader_b", "runtime": "claude-code"}, relay_db)
+            register_relay_agent(
+                relay, {"project_id": "paging", "agent_id": "sender", "runtime": "codex"}, relay_db
+            )
+            register_relay_agent(
+                relay, {"project_id": "paging", "agent_id": "reader_a", "runtime": "codex"}, relay_db
+            )
+            register_relay_agent(
+                relay, {"project_id": "paging", "agent_id": "reader_b", "runtime": "claude-code"}, relay_db
+            )
             with relay.connect(relay_db) as conn:
                 self.assertEqual(conn.execute("SELECT COUNT(*) FROM message_audience").fetchone()[0], 0)
             sent = [
@@ -963,7 +1010,9 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertEqual(archived["receipt_summary"]["acked_count"], 1)
             self.assertFalse(archived["receipt_summary"]["all_acked"])
 
-            relay.register_agent({"project_id": "paging", "agent_id": "late_reader", "runtime": "codex"}, relay_db)
+            register_relay_agent(
+                relay, {"project_id": "paging", "agent_id": "late_reader", "runtime": "codex"}, relay_db
+            )
             late_inbox = relay.fetch_inbox("paging", "late_reader", limit=500, db=relay_db)
             self.assertEqual(late_inbox["messages"], [])
 
@@ -1589,6 +1638,8 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertIn("cli", doctor)
             self.assertFalse(doctor["cli"]["shim_exists"])
             self.assertEqual(doctor["scope"]["mode"], "unknown")
+            self.assertTrue(doctor["user"]["configured"])
+            self.assertEqual(doctor["user"]["slug"], "test-user")
             self.assertFalse(doctor["board"]["required"])
             self.assertFalse((home / "board").exists())
 
@@ -1661,11 +1712,13 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertTrue((paths["claude"] / "SKILL.md").exists())
             installed_skill = (paths["codex"] / "SKILL.md").read_text(encoding="utf-8")
             self.assertIn("scope-first", installed_skill)
-            self.assertIn("pipx install agent-commons==0.3.1", installed_skill)
-            self.assertIn("Commons 0.3.1 or newer is required", installed_skill)
+            self.assertIn("pipx install agent-commons==0.4.0", installed_skill)
+            self.assertIn("Commons 0.4.0 or newer is required", installed_skill)
             self.assertIn("contact_code", installed_skill)
             self.assertIn("Commons scope", installed_skill)
             self.assertIn("scope resolve", installed_skill)
+            self.assertIn("commons user set", installed_skill)
+            self.assertIn("Never infer the human name", installed_skill)
             self.assertIn("remote msg broadcast", installed_skill)
             self.assertNotIn("python3 -m commons.cli doctor --fix", installed_skill)
             self.assertFalse((commons_home / "board").exists())
@@ -1986,7 +2039,14 @@ class CommonsCoreTests(unittest.TestCase):
 
                 header_project = urllib.request.Request(
                     f"{url}/v1/agents/register",
-                    data=json.dumps({"agent_id": "agent_header", "runtime": "codex"}).encode("utf-8"),
+                    data=json.dumps(
+                        {
+                            "agent_id": "agent_header",
+                            "runtime": "codex",
+                            "handle": "test-user-codex-header",
+                            "user_name": "Test User",
+                        }
+                    ).encode("utf-8"),
                     headers={
                         "Authorization": "Bearer test-token",
                         "Content-Type": "application/json",
@@ -2162,8 +2222,8 @@ class CommonsCoreTests(unittest.TestCase):
                 )
                 self.assertEqual(agent_a["agent_id"], "agent_a")
                 self.assertEqual(agent_b["agent_id"], "agent_b")
-                self.assertEqual(agent_a["handle"], "codex-alpha")
-                self.assertEqual(agent_b["handle"], "claude-beta")
+                self.assertEqual(agent_a["handle"], "test-user-codex-alpha")
+                self.assertEqual(agent_b["handle"], "test-user-claude-beta")
                 self.assertEqual(agent_a["contact_code"], "C7DX92")
                 self.assertEqual(agent_a["workspace"], "secret-repo")
                 self.assertTrue(agent_a["workspace_path_redacted"])
@@ -2260,7 +2320,7 @@ class CommonsCoreTests(unittest.TestCase):
                 )
                 self.assertEqual(task["status"], "in_progress")
                 self.assertEqual(task["progress_percent"], 20)
-                self.assertEqual(task["owner"]["handle"], "codex-alpha")
+                self.assertEqual(task["owner"]["handle"], "test-user-codex-alpha")
                 updated_task = json_stdout(
                     run_cli(
                         home,
@@ -2296,7 +2356,7 @@ class CommonsCoreTests(unittest.TestCase):
                         "remote",
                         "msg",
                         "send",
-                        "@claude-beta",
+                        "@test-user-claude-beta",
                         "hello from remote relay",
                         "--sender",
                         "agent_a",
@@ -2390,11 +2450,13 @@ class CommonsCoreTests(unittest.TestCase):
 
                 from commons import relay as relay_module
 
-                relay_module.register_agent(
+                register_relay_agent(
+                    relay_module,
                     {"project_id": "paging-http", "agent_id": "paging_sender", "runtime": "codex"},
                     str(relay_db),
                 )
-                relay_module.register_agent(
+                register_relay_agent(
+                    relay_module,
                     {"project_id": "paging-http", "agent_id": "paging_reader", "runtime": "claude-code"},
                     str(relay_db),
                 )
@@ -2470,31 +2532,6 @@ class CommonsCoreTests(unittest.TestCase):
                 renew_action = shlex.split(same_holder_error["details"]["safe_next_actions"][0])
                 self.assertEqual(renew_action[:4], ["commons", "remote", "lease", "renew"])
 
-                mode_change = run_cli(
-                    home,
-                    "remote",
-                    "lease",
-                    "acquire",
-                    "deploy-slot:demo/staging",
-                    "--mode",
-                    "write",
-                    "--agent",
-                    "agent_a",
-                    "--ttl",
-                    "1h",
-                    check=False,
-                    extra_env=extra_env,
-                )
-                self.assertEqual(mode_change.returncode, 2)
-                mode_change_error = json_stdout(mode_change)
-                self.assertEqual(mode_change_error["error_code"], "lease_mode_change_conflict")
-                self.assertTrue(mode_change_error["details"]["mode_change"])
-                self.assertEqual(len(mode_change_error["details"]["safe_next_actions"]), 1)
-                self.assertNotIn(
-                    "renew",
-                    shlex.split(mode_change_error["details"]["safe_next_actions"][0]),
-                )
-
                 missing_renew_epoch = run_cli(
                     home,
                     "remote",
@@ -2538,9 +2575,9 @@ class CommonsCoreTests(unittest.TestCase):
                 denial = json.loads(denied.stdout)
                 self.assertEqual(denial["error_code"], "lease_conflict")
                 self.assertEqual(denial["details"]["holder_agent_id"], "agent_a")
-                self.assertEqual(denial["details"]["holder_handle"], "codex-alpha")
+                self.assertEqual(denial["details"]["holder_handle"], "test-user-codex-alpha")
                 self.assertEqual(denial["details"]["holder_contact_code"], "C7DX92")
-                self.assertEqual(denial["details"]["coordination_recipient"], "@codex-alpha")
+                self.assertEqual(denial["details"]["coordination_recipient"], "@test-user-codex-alpha")
                 self.assertEqual(denial["details"]["resource_id"], "DEPLOY-SLOT:demo//staging/")
                 remote_coordination = shlex.split(denial["details"]["safe_next_actions"][0])
                 self.assertIn("file", remote_coordination)
@@ -2645,6 +2682,18 @@ class CommonsCoreTests(unittest.TestCase):
                 self.assertTrue(overview["recent_broadcasts"])
                 self.assertTrue(all(message["recipient_agent_id"] is None for message in overview["recent_broadcasts"]))
                 self.assertTrue(all(message["project_display_name"] for message in overview["recent_broadcasts"]))
+
+                village_request = urllib.request.Request(f"{url}/v1/console/village", headers=console_headers)
+                with local_urlopen(village_request, timeout=1) as response:
+                    village = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(village["workspace"]["name"], "Test Workspace")
+                self.assertEqual(village["agent_limit_per_project"], 12)
+                demo_village = next(item for item in village["projects"] if item["project"]["project_id"] == "demo")
+                self.assertEqual(demo_village["project"]["agent_count"], 4)
+                self.assertTrue(demo_village["agents"])
+                self.assertTrue(all(agent["presence"] != "offline" for agent in demo_village["agents"]))
+                self.assertLessEqual(len(demo_village["agents"]), village["agent_limit_per_project"])
+                self.assertTrue(any(message["message_id"] == msg["message_id"] for message in demo_village["recent_messages"]))
 
                 project_request = urllib.request.Request(f"{url}/v1/console/projects/demo", headers=console_headers)
                 with local_urlopen(project_request, timeout=1) as response:

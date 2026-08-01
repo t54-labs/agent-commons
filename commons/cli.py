@@ -15,6 +15,7 @@ from . import __version__
 from . import board
 from . import service
 from . import daemon_control
+from . import identity
 from . import remote
 
 
@@ -151,6 +152,12 @@ def build_parser() -> argparse.ArgumentParser:
     install_skill.add_argument("--target", choices=["codex", "claude", "both"], default="both")
     install_skill.add_argument("--scope", choices=["user", "project"], default="user")
     install_skill.add_argument("--project-dir")
+
+    user_cmd = sub.add_parser("user")
+    user_sub = user_cmd.add_subparsers(dest="user_cmd", required=True)
+    user_sub.add_parser("show")
+    user_set = user_sub.add_parser("set")
+    user_set.add_argument("--name", required=True)
 
     scope_cmd = sub.add_parser("scope")
     scope_sub = scope_cmd.add_subparsers(dest="scope_cmd", required=True)
@@ -653,6 +660,11 @@ def command(args: argparse.Namespace) -> tuple[Any, int]:
         return service.doctor(args.fix, args.project_dir), 0
     if args.cmd == "install-skill":
         return service.install_skill(args.target, args.scope, args.project_dir), 0
+    if args.cmd == "user":
+        if args.user_cmd == "show":
+            return identity.load_profile(), 0
+        if args.user_cmd == "set":
+            return identity.save_profile(args.name), 0
     if args.cmd == "scope":
         from . import scope as scope_config
 
@@ -725,12 +737,25 @@ def command(args: argparse.Namespace) -> tuple[Any, int]:
             if args.remote_agent_cmd == "register":
                 project = remote.project_arg(args.remote, args.project)
                 workspace, workspace_redacted = remote_workspace_arg(args.workspace, args.share_workspace_path)
+                profile = identity.require_profile()
+                default_label = "-".join(
+                    part
+                    for part in (
+                        args.runtime,
+                        Path(workspace).name if workspace else None,
+                        args.agent[-8:] if args.agent else None,
+                    )
+                    if part
+                )
+                handle = identity.qualify_handle(profile, args.handle or default_label)
+                name = identity.qualify_name(profile, args.name or handle)
                 payload = {
                     "agent_id": args.agent,
                     "runtime": args.runtime,
                     "workspace": workspace,
-                    "name": args.name,
-                    "handle": args.handle,
+                    "name": name,
+                    "handle": handle,
+                    "user_name": profile["name"],
                     "contact_code": args.contact_code,
                     "task_id": args.task,
                 }
@@ -870,7 +895,12 @@ def command(args: argparse.Namespace) -> tuple[Any, int]:
                 return remote.get_task(args.remote, project, args.task_id), 0
     if args.cmd == "agent":
         if args.agent_cmd == "register":
-            return service.register_agent(args.runtime, args.workspace, args.name, args.task, args.runtime_version), 0
+            profile = identity.require_profile()
+            workspace_label = Path(args.workspace).name if args.workspace else Path.cwd().name
+            qualified_name = identity.qualify_name(profile, args.name or f"{args.runtime}-{workspace_label}")
+            result = service.register_agent(args.runtime, args.workspace, qualified_name, args.task, args.runtime_version)
+            result.update({"name": qualified_name, "user_name": profile["name"], "user_slug": profile["slug"]})
+            return result, 0
         if args.agent_cmd == "heartbeat":
             return service.heartbeat(args.agent, args.status), 0
         if args.agent_cmd == "list":

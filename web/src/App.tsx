@@ -26,7 +26,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { FormEvent, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ApiError,
   getAgentDetail,
@@ -37,6 +37,7 @@ import {
   getProjectOverview,
   getProjectTasks,
   getSession,
+  getVillage,
   login,
   logout,
 } from "./api";
@@ -56,6 +57,7 @@ import type {
   ProjectSummary,
   Task,
   TasksPage,
+  VillageSnapshot,
   WorkspaceBroadcast,
 } from "./types";
 
@@ -71,6 +73,8 @@ const PROJECT_NAV_ITEMS: Array<{ id: ConsoleView; label: string; icon: LucideIco
   { id: "broadcasts", label: "Broadcasts", icon: MessageSquareText },
   { id: "resources", label: "Resources", icon: KeyRound },
 ];
+
+const AgentVillage = lazy(() => import("./AgentVillage"));
 
 function formatClock(value: string): string {
   const date = new Date(value);
@@ -388,17 +392,25 @@ function scrollToProjects() {
 
 function WorkspaceOverview({
   overview,
+  village,
+  villageLoading,
+  villageError,
   filter,
   query,
   onFilter,
   onProject,
+  onAgent,
   onBroadcast,
 }: {
   overview: Overview;
+  village: VillageSnapshot | null;
+  villageLoading: boolean;
+  villageError: string;
   filter: WorkspaceFilter;
   query: string;
   onFilter: (filter: WorkspaceFilter) => void;
   onProject: (projectId: string) => void;
+  onAgent: (projectId: string, agent: Agent) => void;
   onBroadcast: (message: WorkspaceBroadcast) => void;
 }) {
   const projects = useMemo(() => {
@@ -417,6 +429,17 @@ function WorkspaceOverview({
 
   return (
     <div className="view-stack workspace-overview">
+      <Suspense fallback={<section className="agent-village agent-village--module-loading"><div className="agent-village__stage"><div className="agent-village__loading"><span /><span>Opening the floor...</span></div></div></section>}>
+        <AgentVillage
+          snapshot={village}
+          fallbackProjects={overview.projects}
+          loading={villageLoading}
+          error={villageError}
+          onProject={onProject}
+          onAgent={onAgent}
+        />
+      </Suspense>
+
       <div className="metrics-row metrics-row--five" aria-label="Workspace summary">
         <MetricButton icon={Boxes} label="Projects" value={overview.totals.projects} detail="All Relay projects" tone="plain" onClick={() => selectFilter("all")} pressed={filter === "all"} />
         <MetricButton icon={Users} label="Active / registered" value={`${overview.totals.active_agents} / ${overview.totals.registered_agents}`} detail="Current / known Agents" tone="teal" onClick={() => selectFilter("active_agents")} pressed={filter === "active_agents"} />
@@ -767,6 +790,9 @@ function ProjectTabs({ view, onView }: { view: ConsoleView; onView: (view: Conso
 
 function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [village, setVillage] = useState<VillageSnapshot | null>(null);
+  const [villageLoading, setVillageLoading] = useState(true);
+  const [villageError, setVillageError] = useState("");
   const [projectId, setProjectId] = useState("");
   const [detail, setDetail] = useState<ProjectOverviewDetail | null>(null);
   const [view, setView] = useState<ConsoleView>("overview");
@@ -822,6 +848,22 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
     }
   }, [handleError]);
 
+  const refreshVillage = useCallback(async () => {
+    try {
+      const next = await getVillage();
+      setVillage(next);
+      setVillageError("");
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.status === 401) {
+        onUnauthorized();
+        return;
+      }
+      setVillageError(caught instanceof Error ? caught.message : "Unable to load the Agent village.");
+    } finally {
+      setVillageLoading(false);
+    }
+  }, [onUnauthorized]);
+
   const refreshProject = useCallback(async (id: string, showLoading = false) => {
     const requestId = ++projectRequestId.current;
     if (!id) {
@@ -847,7 +889,7 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
     }
   }, [handleError]);
 
-  useEffect(() => { void refreshOverview(); }, [refreshOverview]);
+  useEffect(() => { void refreshOverview(); void refreshVillage(); }, [refreshOverview, refreshVillage]);
   useEffect(() => { if (projectId) void refreshProject(projectId, !projectCache.current.has(projectId)); }, [projectId, refreshProject]);
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 250);
@@ -949,6 +991,7 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
       if (refreshTimer.current != null) window.clearTimeout(refreshTimer.current);
       refreshTimer.current = window.setTimeout(() => {
         void refreshOverview();
+        void refreshVillage();
         if (projectId) void refreshProject(projectId);
         if (projectId && view !== "overview") setViewRefreshVersion((current) => current + 1);
       }, 250);
@@ -957,18 +1000,19 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
       stream.close();
       if (refreshTimer.current != null) window.clearTimeout(refreshTimer.current);
     };
-  }, [projectId, refreshOverview, refreshProject, streamReady, view]);
+  }, [projectId, refreshOverview, refreshProject, refreshVillage, streamReady, view]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       void refreshOverview();
+      void refreshVillage();
       if (projectId) void refreshProject(projectId);
       if (projectId && view !== "overview") setViewRefreshVersion((current) => current + 1);
       if (selectedAgentRef.current) setAgentRefreshVersion((current) => current + 1);
     }, 20000);
     return () => window.clearInterval(interval);
-  }, [projectId, refreshOverview, refreshProject, view]);
+  }, [projectId, refreshOverview, refreshProject, refreshVillage, view]);
 
   const activeDetail = detail?.project.project_id === projectId ? detail : null;
   const projectIsLoading = Boolean(projectId && projectLoadingId === projectId && !activeDetail);
@@ -1049,6 +1093,11 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
     setView("broadcasts");
     setQuery("");
     setSelectedMessage(message);
+  }
+
+  function openVillageAgent(id: string, agent: Agent) {
+    openProject(id);
+    openAgent(agent);
   }
 
   function handleActivity(event: ActivityEvent) {
@@ -1188,17 +1237,18 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
               <Search size={16} aria-hidden="true" />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={projectId ? `Search ${currentTitle.toLowerCase()}` : "Search projects"} aria-label={projectId ? `Search ${currentTitle.toLowerCase()}` : "Search projects"} />
             </div>
-            <button className="icon-button" type="button" onClick={() => { void refreshOverview(); if (projectId) void refreshProject(projectId, !activeDetail); if (projectId && view !== "overview") setViewRefreshVersion((current) => current + 1); }} title="Refresh data" aria-label="Refresh data"><RefreshCw size={17} /></button>
+            <button className="icon-button" type="button" onClick={() => { void refreshOverview(); void refreshVillage(); if (projectId) void refreshProject(projectId, !activeDetail); if (projectId && view !== "overview") setViewRefreshVersion((current) => current + 1); }} title="Refresh data" aria-label="Refresh data"><RefreshCw size={17} /></button>
           </header>
 
           <div className="workspace-content">
-            <header className="page-heading">
-              <div>
-                {(!projectId || view !== "overview") && <p>{projectId ? selectedProject?.display_name || activeDetail?.project.display_name || "Project" : overview?.workspace.name || "Commons Workspace"}</p>}
-                <h1>{projectId ? view === "overview" ? selectedProject?.display_name || activeDetail?.project.display_name || "Project" : currentTitle : "Workspace overview"}</h1>
-              </div>
-              <div className="page-heading__meta"><span className={`signal-dot ${live ? "signal-dot--teal" : "signal-dot--coral"}`} /><span>{live ? "Relay connected" : "Relay reconnecting"}</span><small>{projectId && activeDetail ? `Updated ${formatRelative(activeDetail.project.last_activity_at)}` : projectId ? "Loading Project data" : `${overview?.totals.projects || 0} projects`}</small></div>
-            </header>
+            {projectId && (
+              <header className="page-heading">
+                <div>
+                  {view !== "overview" && <p>{selectedProject?.display_name || activeDetail?.project.display_name || "Project"}</p>}
+                  <h1>{view === "overview" ? selectedProject?.display_name || activeDetail?.project.display_name || "Project" : currentTitle}</h1>
+                </div>
+              </header>
+            )}
 
             {projectId && <ProjectTabs view={view} onView={openProjectView} />}
 
@@ -1213,8 +1263,8 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
 
             {projectIsLoading && <div className="metrics-skeleton metrics-skeleton--project" aria-label="Loading project summary" aria-busy="true"><span /><span /><span /><span /></div>}
 
-            {error && <div className="error-banner"><AlertTriangle size={17} /><span>{error}</span><button type="button" onClick={() => { void refreshOverview(); if (projectId) void refreshProject(projectId, true); if (projectId && view !== "overview") setViewRefreshVersion((current) => current + 1); }}>Retry</button></div>}
-            {overviewLoading && !overview ? <div className="content-skeleton"><span /><span /><span /></div> : !overview ? null : !projectId ? <WorkspaceOverview overview={overview} filter={workspaceFilter} query={normalizedQuery} onFilter={setWorkspaceFilter} onProject={openProject} onBroadcast={openWorkspaceBroadcast} /> : projectIsLoading ? <div className="content-skeleton" aria-label="Loading project details" aria-busy="true"><span /><span /><span /></div> : projectContent}
+            {error && <div className="error-banner"><AlertTriangle size={17} /><span>{error}</span><button type="button" onClick={() => { void refreshOverview(); void refreshVillage(); if (projectId) void refreshProject(projectId, true); if (projectId && view !== "overview") setViewRefreshVersion((current) => current + 1); }}>Retry</button></div>}
+            {overviewLoading && !overview ? <div className="content-skeleton"><span /><span /><span /></div> : !overview ? null : !projectId ? <WorkspaceOverview overview={overview} village={village} villageLoading={villageLoading} villageError={villageError} filter={workspaceFilter} query={normalizedQuery} onFilter={setWorkspaceFilter} onProject={openProject} onAgent={openVillageAgent} onBroadcast={openWorkspaceBroadcast} /> : projectIsLoading ? <div className="content-skeleton" aria-label="Loading project details" aria-busy="true"><span /><span /><span /></div> : projectContent}
           </div>
         </div>
 

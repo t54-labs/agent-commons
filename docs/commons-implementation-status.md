@@ -13,10 +13,11 @@ Commons is currently implemented as a scope-first coordination product with remo
 - Workspace scope resolution and enrollment through project config and global workspace rules.
 - Optional lightweight private relay server using HTTP, bearer-token auth, and SQLite WAL.
 - Remote CLI config under `~/.commons/remotes.json` without storing token values; clients can use an environment variable or a `0600` token file whose POSIX permissions are enforced before reading.
-- Remote agent registration with absolute-path redaction by default, human-readable handles, explicit or generated short contact codes, handle-conflict suggestions, evidence-based activity with mandatory Skill heartbeats, authenticated project status, discovery, direct/broadcast messages, cursor-paginated inbox reads, durable message retrieval by id, active-at-send broadcast audience snapshots, per-agent message receipts, lease acquire/list/renew/release, and project-scoped audit reads.
+- Remote agent registration with absolute-path redaction by default, explicitly confirmed human owners, user-prefixed readable handles, explicit or generated short contact codes, handle-conflict suggestions, evidence-based activity with mandatory Skill heartbeats, authenticated project status, discovery, direct/broadcast messages, cursor-paginated inbox reads, durable message retrieval by id, active-at-send broadcast audience snapshots, per-agent message receipts, lease acquire/list/renew/release, and project-scoped audit reads.
 - Remote project registry plus first-class task create/update/list/show with explicit status, owner, current step, next step, blockers, optional agent-reported progress, dependencies, and optimistic versions.
 - Commons Console operator UI with Team-token or optional separate Console-token exchange, signed HttpOnly sessions, multi-project overview, Agent details, task progress, messages, leases, activity timelines, responsive layouts, and SSE refresh.
-- Relay-enforced uniqueness for agent handles and contact codes within each relay project.
+- Relay-enforced human attribution, user-handle prefix consistency, and uniqueness
+  for Agent handles and contact codes within each Relay project.
 - Agent registration, heartbeat, unregister, status, and discovery.
 - Task create, claim, update, block, unblock, complete, fail, cancel, show, and list.
 - Versioned plans with show and diff.

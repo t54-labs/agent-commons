@@ -29,6 +29,8 @@ each completed gate.
 - [ ] Relay and Console container targets build.
 - [ ] Fresh Compose stack passes health, unauthenticated denial, Team-token login, Console overview, and Relay API checks.
 - [ ] Real Codex and Claude Code runtime smoke is either passed or explicitly marked `NOT RUN` with reason.
+- [ ] A clean 0.3.0 client-to-0.4.0 upgrade refreshes both global Skills and preserves existing Relay state.
+- [ ] New Agent registration rejects missing or mismatched human attribution, while existing legacy Agents remain readable.
 
 ## Security and Privacy
 
@@ -38,6 +40,7 @@ each completed gate.
 - [ ] Every public image and audio file has a documented source or generation path in `docs/assets/README.md`.
 - [ ] Relay token files and examples use `0600` guidance.
 - [ ] Scope-first `remote`, `local`, and `disabled` behavior is documented.
+- [ ] Human-owner prompts do not infer identity from account, Git, email, host, or workspace metadata.
 - [ ] Public Relay and untrusted multi-tenant operation remain explicit non-goals.
 - [ ] Advisory versus wrapper-enforced lease behavior is explicit.
 - [ ] Vulnerability reporting and a confidential Code of Conduct channel are configured.
@@ -116,6 +119,11 @@ each completed gate.
 5. Verify the GitHub Release and `SHA256SUMS` bundle.
 6. Approve the protected `pypi` environment.
 7. Verify the OIDC publication, attestations, hashes, metadata, and a clean pinned pipx installation.
+
+For `0.4.0`, upgrade clients and refresh their global Skills before deploying
+the Relay registration enforcement. Verify `commons user show --json` on each
+machine, then deploy and run the remote acceptance suite. The Relay must never
+attempt to mutate a client's local Skill files.
 
 ## Initial Public Repository Launch Order
 

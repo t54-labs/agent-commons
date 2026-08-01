@@ -55,6 +55,24 @@ Normal clients should use the HTTPS domain URL. Do not publish the relay as a pu
 The Relay requires Python 3.11 or newer. Point `ExecStart` at an explicit Python
 3.11+ binary instead of relying on the operating system's default `python3`.
 
+## Staged User-Prefix Rollout
+
+Commons 0.4 clients attribute every newly registered Agent to an explicitly
+configured human user and prefix the Agent handle with that user's slug. Relay
+enforcement is enabled by default.
+
+When upgrading an existing private Relay before every team member has upgraded
+their CLI and Skill, operators may temporarily add this compatibility setting:
+
+```text
+COMMONS_REQUIRE_USER_PREFIX=false
+```
+
+This allows an older client to create an unattributed Agent during the rollout.
+Clients that already send `user_name` remain fully validated, including their
+handle prefix. Remove the setting, or set it to `true`, as soon as all clients
+have upgraded. Do not use the compatibility setting for a fresh deployment.
+
 ## DNS
 
 Create a DNS record in your private or public DNS zone:

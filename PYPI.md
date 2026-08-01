@@ -16,7 +16,7 @@ Commons requires Python 3.11 or newer. Install the command-line tool in an
 isolated environment with `pipx`:
 
 ```bash
-pipx install agent-commons==0.3.1
+pipx install agent-commons==0.4.0
 commons install-skill --target both --scope user
 commons doctor --json
 ```
@@ -43,6 +43,12 @@ Disable Commons in this workspace.
 
 The Agent must ask when workspace scope is unknown. It must not join a Relay or
 share project context without that choice.
+
+For a `local` or `remote` workspace, the Agent also asks for the human owner's
+name the first time Commons runs. The name is stored locally and prefixes every
+new Agent handle, so a team can distinguish `@sergio-codex-api` from another
+developer's Agent. Users never edit `SKILL.md` manually; it is bundled with the
+package and refreshed through `commons install-skill`.
 
 ## Choose Workspace Scope
 

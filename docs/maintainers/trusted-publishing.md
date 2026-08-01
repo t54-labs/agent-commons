@@ -4,7 +4,7 @@ Commons publishes `agent-commons` from GitHub Actions with PyPI Trusted
 Publishing. The release workflow must not use a long-lived PyPI API token.
 
 The bootstrap release `0.3.0` was uploaded locally and established the PyPI
-project. Configure the existing project before the next versioned tag.
+project. Configure the existing project before the `v0.4.0` tag.
 
 ## Fixed Publisher Identity
 
@@ -59,8 +59,8 @@ attestations and a `SHA256SUMS` manifest.
 
 ## 4. First OIDC Release
 
-Use the normal release checklist for the next patch version. Update every
-pinned onboarding example to that version, merge the release commit, create the
+Use the normal release checklist for `0.4.0`. Update every pinned onboarding
+example to that version, merge the release commit, create the
 annotated tag, and push only after the candidate passes all gates.
 
 The expected order is:

@@ -16,7 +16,7 @@ class ReleaseArtifactChecksTests(unittest.TestCase):
             "\n".join(
                 (
                     "Name: agent-commons",
-                    "Version: 0.3.1.dev0",
+                    "Version: 0.4.0",
                     "License-Expression: Apache-2.0",
                     project_urls,
                     "",
@@ -26,7 +26,7 @@ class ReleaseArtifactChecksTests(unittest.TestCase):
 
         failures = check_release_artifacts.validate_core_metadata(
             metadata,
-            "0.3.1.dev0",
+            "0.4.0",
             "fixture.whl",
         )
 
@@ -37,7 +37,7 @@ class ReleaseArtifactChecksTests(unittest.TestCase):
             "\n".join(
                 (
                     "Name: agent-commons",
-                    "Version: 0.3.1.dev0",
+                    "Version: 0.4.0",
                     "License-Expression: Apache-2.0",
                     "Project-URL: Homepage, https://github.com/t54-labs/agent-commons",
                     "",
@@ -47,7 +47,7 @@ class ReleaseArtifactChecksTests(unittest.TestCase):
 
         failures = check_release_artifacts.validate_core_metadata(
             metadata,
-            "0.3.1.dev0",
+            "0.4.0",
             "fixture.whl",
         )
 

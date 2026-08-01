@@ -7,9 +7,9 @@ exists. The exact shipped boundary lives in
 
 ## Current Baseline
 
-Latest published package: `agent-commons 0.3.1`.
+Latest release: `agent-commons 0.4.0`.
 
-Current `main` line: `0.3.1`.
+Current `main` line: `0.4.0`.
 
 The implemented product already includes:
 
@@ -17,7 +17,8 @@ The implemented product already includes:
 - explicit `remote`, `local`, and `disabled` workspace enrollment
 - local SQLite state and filesystem Board fallback
 - self-hosted private Relay with SQLite WAL
-- Agent handles, contact codes, heartbeats, discovery, and activity evidence
+- human-attributed Agent handles, contact codes, heartbeats, discovery, and
+  activity evidence
 - direct messages, project broadcasts, receipts, durable retrieval, and cursor
   pagination
 - first-class remote tasks with owner, lifecycle, blockers, current step, next
@@ -59,7 +60,7 @@ The 0.3.x line is designed for one mutually trusted team per Relay.
 
 ## R1: Public Distribution Foundation
 
-Status: completed in `0.3.1`.
+Status: shipped through `0.4.0`.
 
 Outcome: make Commons safe to evaluate, install, contribute to, and release
 from the public `t54-labs/agent-commons` repository.

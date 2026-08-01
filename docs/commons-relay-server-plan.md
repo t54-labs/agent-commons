@@ -156,11 +156,18 @@ Registration body:
   "project_id": "commons-demo",
   "agent_id": "agent_local_a",
   "runtime": "codex",
-  "workspace": "/path/to/project",
-  "name": "codex-a",
+  "workspace": "project",
+  "user_name": "Sergio",
+  "handle": "sergio-codex-a",
+  "name": "Sergio-codex-a",
   "task_id": "task_123"
 }
 ```
+
+As of 0.4.0, every new Agent registration requires `user_name` and a handle
+whose prefix matches the normalized user name. The CLI constructs these fields;
+custom clients must follow the same contract. Pre-0.4.0 Agent rows remain
+readable during migration.
 
 ### Messages
 

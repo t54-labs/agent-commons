@@ -23,6 +23,13 @@ from pathlib import Path
 from typing import Any, Iterator
 from urllib.parse import parse_qs, unquote, urlparse
 
+from .identity import (
+    MAX_AGENT_HANDLE_LENGTH,
+    IdentityError,
+    handle_has_user_prefix,
+    profile_from_name,
+    qualify_name,
+)
 from .paths import ensure_base_dirs, relay_db_path
 from .http_server import CommonsThreadingHTTPServer
 from .service import LEASE_COMPAT
@@ -43,6 +50,8 @@ REMOTE_TASK_STATUSES = {
 }
 CONSOLE_COOKIE_NAME = "commons_console_session"
 CONSOLE_SESSION_TTL_SECONDS = 12 * 60 * 60
+CONSOLE_VILLAGE_AGENT_LIMIT = 12
+CONSOLE_VILLAGE_MESSAGE_LIMIT = 12
 AGENT_RECENT_SECONDS = 2 * 60
 AGENT_ACTIVE_SECONDS = 30 * 60
 MAX_REQUEST_BODY_BYTES = 1024 * 1024
@@ -50,6 +59,14 @@ MAX_QUERY_LIMIT = 10_000
 REQUEST_SOCKET_TIMEOUT_SECONDS = 15
 _RELAY_INIT_LOCK = threading.Lock()
 _INITIALIZED_RELAY_DBS: dict[str, tuple[int, int]] = {}
+
+
+def user_prefix_enforcement_enabled() -> bool:
+    """Return whether new Relay registrations require human attribution."""
+    value = os.environ.get("COMMONS_REQUIRE_USER_PREFIX")
+    if value is None:
+        return True
+    return value.strip().lower() not in {"0", "false", "no", "off"}
 
 
 RELAY_SCHEMA = """
@@ -75,6 +92,8 @@ CREATE TABLE IF NOT EXISTS agents (
   handle TEXT,
   contact_code TEXT,
   name TEXT,
+  user_name TEXT,
+  user_slug TEXT,
   runtime TEXT NOT NULL,
   workspace TEXT,
   task_id TEXT,
@@ -358,6 +377,10 @@ def ensure_agent_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE agents ADD COLUMN handle TEXT")
     if "contact_code" not in existing:
         conn.execute("ALTER TABLE agents ADD COLUMN contact_code TEXT")
+    if "user_name" not in existing:
+        conn.execute("ALTER TABLE agents ADD COLUMN user_name TEXT")
+    if "user_slug" not in existing:
+        conn.execute("ALTER TABLE agents ADD COLUMN user_slug TEXT")
     conn.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_handle
@@ -679,14 +702,100 @@ def register_agent(payload: dict[str, Any], db: str | None = None) -> dict[str, 
     project_id = required(payload, "project_id")
     agent_id = payload.get("agent_id") or make_id("agent")
     runtime = payload.get("runtime") or "custom"
-    handle = normalize_handle(payload.get("handle"))
+    requested_handle = normalize_handle(payload.get("handle"))
     requested_code = normalize_contact_code(payload.get("contact_code"))
     ts = utc_now()
     with connect(db) as conn, transaction(conn):
         existing = conn.execute(
-            "SELECT registered_at, contact_code FROM agents WHERE project_id = ? AND agent_id = ?",
+            """
+            SELECT registered_at, handle, contact_code, name, user_name, user_slug
+              FROM agents
+             WHERE project_id = ? AND agent_id = ?
+            """,
             (project_id, agent_id),
         ).fetchone()
+        supplied_user_name = payload.get("user_name")
+        existing_user_name = existing["user_name"] if existing else None
+        existing_user_slug = existing["user_slug"] if existing else None
+        profile = None
+        if supplied_user_name:
+            try:
+                profile = profile_from_name(str(supplied_user_name), "relay-request")
+            except IdentityError as exc:
+                raise RelayError(
+                    str(exc),
+                    code=exc.code,
+                    details=exc.details,
+                    remediation=exc.remediation,
+                ) from exc
+            if existing_user_slug and profile["slug"] != existing_user_slug:
+                raise RelayError(
+                    "Agent is already attributed to a different Commons user",
+                    code="agent_user_identity_conflict",
+                    details={
+                        "project_id": project_id,
+                        "agent_id": agent_id,
+                        "existing_user_slug": existing_user_slug,
+                        "requested_user_slug": profile["slug"],
+                    },
+                    remediation="Register a new Agent id instead of changing the human owner of an existing Agent.",
+                )
+        elif existing_user_name and existing_user_slug:
+            profile = {
+                "configured": True,
+                "name": existing_user_name,
+                "slug": existing_user_slug,
+                "source": "relay-record",
+            }
+        elif not existing and user_prefix_enforcement_enabled():
+            raise RelayError(
+                "Commons user name is required for new Agent registration",
+                code="user_name_required",
+                remediation=(
+                    'Ask the user for their name, run commons user set --name "<name>", '
+                    "then register the Agent again."
+                ),
+            )
+
+        handle = requested_handle or (existing["handle"] if existing else None)
+        if profile:
+            if not handle:
+                raise RelayError(
+                    "A user-prefixed Agent handle is required",
+                    code="agent_handle_required",
+                    details={"required_prefix": f"{profile['slug']}-"},
+                    remediation="Register with --handle <user-name>-<agent-name>.",
+                )
+            if len(handle) > MAX_AGENT_HANDLE_LENGTH:
+                raise RelayError(
+                    "Agent handle is too long",
+                    code="invalid_agent_handle",
+                    details={"maximum_length": MAX_AGENT_HANDLE_LENGTH},
+                    remediation=f"Use a handle no longer than {MAX_AGENT_HANDLE_LENGTH} characters.",
+                )
+            if not handle_has_user_prefix(handle, str(profile["slug"])):
+                raise RelayError(
+                    "Agent handle must begin with the Commons user prefix",
+                    code="agent_handle_user_prefix_required",
+                    details={
+                        "handle": handle,
+                        "required_prefix": f"{profile['slug']}-",
+                    },
+                    remediation=(
+                        'Run commons user set --name "<name>" locally and let the Commons CLI '
+                        "generate the prefixed handle."
+                    ),
+                )
+            user_name = str(profile["name"])
+            user_slug = str(profile["slug"])
+            proposed_name = payload.get("name") or (existing["name"] if existing else None) or handle
+            name = qualify_name(profile, proposed_name)
+        else:
+            # Legacy Agents remain addressable until they naturally re-register
+            # through a client that supplies human attribution.
+            user_name = None
+            user_slug = None
+            name = payload.get("name") or (existing["name"] if existing else None)
         if handle:
             handle_owner = conn.execute(
                 "SELECT agent_id FROM agents WHERE project_id = ? AND handle = ? AND agent_id != ?",
@@ -717,12 +826,17 @@ def register_agent(payload: dict[str, Any], db: str | None = None) -> dict[str, 
         contact_code = requested_code or (existing["contact_code"] if existing else None) or generate_contact_code(conn, project_id)
         conn.execute(
             """
-            INSERT INTO agents(project_id, agent_id, handle, contact_code, name, runtime, workspace, task_id, status, registered_at, heartbeat_at)
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, 'online', ?, ?)
+            INSERT INTO agents(
+              project_id, agent_id, handle, contact_code, name, user_name, user_slug,
+              runtime, workspace, task_id, status, registered_at, heartbeat_at
+            )
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'online', ?, ?)
             ON CONFLICT(project_id, agent_id) DO UPDATE SET
               handle = excluded.handle,
               contact_code = excluded.contact_code,
               name = excluded.name,
+              user_name = excluded.user_name,
+              user_slug = excluded.user_slug,
               runtime = excluded.runtime,
               workspace = excluded.workspace,
               task_id = excluded.task_id,
@@ -734,7 +848,9 @@ def register_agent(payload: dict[str, Any], db: str | None = None) -> dict[str, 
                 agent_id,
                 handle,
                 contact_code,
-                payload.get("name"),
+                name,
+                user_name,
+                user_slug,
                 runtime,
                 payload.get("workspace"),
                 payload.get("task_id"),
@@ -745,7 +861,14 @@ def register_agent(payload: dict[str, Any], db: str | None = None) -> dict[str, 
         audit(
             conn,
             "agent.registered",
-            {"agent_id": agent_id, "runtime": runtime, "handle": handle, "contact_code": contact_code},
+            {
+                "agent_id": agent_id,
+                "runtime": runtime,
+                "handle": handle,
+                "contact_code": contact_code,
+                "user_name": user_name,
+                "user_slug": user_slug,
+            },
             project_id,
             agent_id,
         )
@@ -1271,10 +1394,7 @@ def acquire_lease(payload: dict[str, Any], db: str | None = None) -> dict[str, A
                 (project_id, canonical),
             )
         )
-        same_holder = next((row for row in active if row["holder_agent_id"] == holder), None)
-        conflicts = [same_holder] if same_holder is not None else [
-            row for row in active if lease_conflicts(row["mode"], mode)
-        ]
+        conflicts = [row for row in active if lease_conflicts(row["mode"], mode)]
         if conflicts:
             conflict = row_to_dict(conflicts[0])
             holder_agent = conn.execute(
@@ -1288,7 +1408,6 @@ def acquire_lease(payload: dict[str, Any], db: str | None = None) -> dict[str, A
                 "project_id": project_id,
                 "resource_id": resource_id,
                 "mode": mode,
-                "requested_ttl_seconds": ttl_seconds,
                 "holder_agent_id": conflict["holder_agent_id"],
                 "holder_handle": holder_handle,
                 "holder_contact_code": holder_contact_code,
@@ -1331,40 +1450,30 @@ def acquire_lease(payload: dict[str, Any], db: str | None = None) -> dict[str, A
             }
             if conflict["holder_agent_id"] == holder:
                 details["same_holder"] = True
-                if conflict["mode"] == mode:
-                    details["safe_next_actions"] = [
-                        shlex.join(
-                            [
-                                "commons",
-                                "remote",
-                                "lease",
-                                "renew",
-                                conflict["lease_id"],
-                                "--remote",
-                                "default",
-                                "--project",
-                                project_id,
-                                "--ttl",
-                                str(payload.get("ttl") or f"{ttl_seconds}s"),
-                                "--agent",
-                                holder,
-                                "--fencing-epoch",
-                                str(conflict["fencing_epoch"]),
-                            ]
-                        ),
-                        details["safe_next_actions"][1],
-                    ]
-                else:
-                    details["mode_change"] = True
-                    details["safe_next_actions"] = [details["safe_next_actions"][1]]
+                details["safe_next_actions"] = [
+                    shlex.join(
+                        [
+                            "commons",
+                            "remote",
+                            "lease",
+                            "renew",
+                            conflict["lease_id"],
+                            "--remote",
+                            "default",
+                            "--project",
+                            project_id,
+                            "--ttl",
+                            str(payload.get("ttl") or "30m"),
+                            "--agent",
+                            holder,
+                            "--fencing-epoch",
+                            str(conflict["fencing_epoch"]),
+                        ]
+                    ),
+                    details["safe_next_actions"][1],
+                ]
             audit(conn, "lease.denied", details, project_id, holder, resource_id)
             if details.get("same_holder"):
-                if details.get("mode_change"):
-                    raise RelayDenied(
-                        "lease mode change requires release and a fresh conflict-checked acquire",
-                        details,
-                        code="lease_mode_change_conflict",
-                    )
                 raise RelayDenied("lease already held by requesting agent", details, code="lease_already_held")
             raise RelayDenied("lease conflict", details, code="lease_conflict")
         epoch = int(resource["fencing_epoch"])
@@ -2542,6 +2651,41 @@ def console_overview(db: str | None = None) -> dict[str, Any]:
         }
 
 
+def console_village(db: str | None = None) -> dict[str, Any]:
+    with connect(db) as conn:
+        projects = []
+        for row in conn.execute("SELECT * FROM projects ORDER BY last_activity_at DESC"):
+            project = console_project_summary(conn, row)
+            agent_page = console_agents_page(
+                conn,
+                str(row["project_id"]),
+                limit=CONSOLE_VILLAGE_AGENT_LIMIT,
+                presence="active",
+            )
+            projects.append(
+                {
+                    "project": project,
+                    "agents": agent_page["items"],
+                    "recent_messages": console_messages(
+                        conn,
+                        str(row["project_id"]),
+                        limit=CONSOLE_VILLAGE_MESSAGE_LIMIT,
+                    ),
+                    "has_more_agents": agent_page["page"]["has_more"],
+                }
+            )
+        return {
+            "workspace": {
+                "id": os.environ.get("COMMONS_WORKSPACE_ID", "default"),
+                "name": os.environ.get("COMMONS_WORKSPACE_NAME", "Commons Team"),
+                "relay": "commons-relay",
+            },
+            "projects": projects,
+            "agent_limit_per_project": CONSOLE_VILLAGE_AGENT_LIMIT,
+            "generated_at": utc_now(),
+        }
+
+
 def console_project(project_id: str, db: str | None = None) -> dict[str, Any]:
     with connect(db) as conn:
         project = require_console_project(conn, project_id)
@@ -2886,6 +3030,9 @@ class RelayHandler(BaseHTTPRequestHandler):
                 if parsed.path in {"/v1/console/overview", "/v1/console/projects"}:
                     overview = console_overview(self._db())
                     self._send(200, overview if parsed.path.endswith("overview") else {"projects": overview["projects"]})
+                    return
+                if parsed.path == "/v1/console/village":
+                    self._send(200, console_village(self._db()))
                     return
                 if parsed.path.startswith("/v1/console/projects/"):
                     self._send(200, self._console_project_response(parsed.path, query))
