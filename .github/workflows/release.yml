@@ -147,7 +147,7 @@ jobs:
           path: dist/release
       - name: Attest public release artifacts
         if: ${{ github.event.repository.private == false }}
-        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4
         with:
           subject-path: dist/release/*
       - name: Create GitHub release
