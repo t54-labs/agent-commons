@@ -266,6 +266,18 @@ test("Agent hover profiles expose owner and registration device without opening 
   await expect(profile).toContainText("commons");
   await expect(page.locator(".agent-drawer")).toHaveCount(0);
 
+  const uiDepths = await actor.evaluate((hoveredActor) => {
+    const depthOf = (element: Element) => Number.parseInt(getComputedStyle(element).zIndex, 10);
+    const otherDepths = [...document.querySelectorAll(".village-agent-ui")]
+      .filter((element) => element !== hoveredActor)
+      .map(depthOf);
+    return {
+      hovered: depthOf(hoveredActor),
+      highestOther: Math.max(...otherDepths),
+    };
+  });
+  expect(uiDepths.hovered).toBeGreaterThan(uiDepths.highestOther);
+
   const stageBounds = await village.locator(".agent-village__stage").boundingBox();
   const profileBounds = await profile.boundingBox();
   expect(stageBounds).not.toBeNull();

@@ -17,6 +17,7 @@ const WALK_FRAMES_PER_DIRECTION = 4;
 const WALK_FRAME_RATE = 8;
 const WORLD_DEPTH_BASE = 100;
 const ACTOR_UI_DEPTH_BASE = 12_000;
+const HOVERED_ACTOR_UI_DEPTH = ACTOR_UI_DEPTH_BASE + MAP_HEIGHT + 1;
 const AGENT_FOOT_RADIUS = 8;
 const SPRITE_FOOT_OFFSET = 2;
 const COLLISION_DEBUG_QUERY = "collisionDebug";
@@ -118,6 +119,10 @@ type SceneBridge = {
 function assetUrl(path: string): string {
   const normalizedPath = path.replace(/^\//, "");
   return `/app/${normalizedPath}?v=${encodeURIComponent(VILLAGE_ASSET_VERSION)}`;
+}
+
+function actorUiDepth(y: number, hovered: boolean): number {
+  return hovered ? HOVERED_ACTOR_UI_DEPTH : ACTOR_UI_DEPTH_BASE + Math.round(y);
 }
 
 function hashString(value: string): number {
@@ -291,7 +296,7 @@ class CommonsVillageScene extends Phaser.Scene {
       actor.moving = this.advanceActorMotion(actor, deltaSeconds);
       actor.uiElement
         .setPosition(actor.container.x, actor.container.y)
-        .setDepth(ACTOR_UI_DEPTH_BASE + Math.round(actor.container.y));
+        .setDepth(actorUiDepth(actor.container.y, actor.hovered));
       const direction = actor.movement?.motion.direction || "down";
       if (actor.moving) {
         const key = animationKey(actor.spriteIndex, direction);
@@ -771,7 +776,7 @@ class CommonsVillageScene extends Phaser.Scene {
       .setDepth(WORLD_DEPTH_BASE + Math.round(initial.y));
     const uiElement = this.add.dom(initial.x, initial.y, uiNode)
       .setOrigin(0, 0)
-      .setDepth(ACTOR_UI_DEPTH_BASE + Math.round(initial.y));
+      .setDepth(actorUiDepth(initial.y, false));
     const actor: SceneActor = {
       container,
       uiElement,
@@ -800,6 +805,7 @@ class CommonsVillageScene extends Phaser.Scene {
     };
     const setHovered = (hovered: boolean) => {
       actor.hovered = hovered;
+      actor.uiElement.setDepth(actorUiDepth(actor.container.y, hovered));
       uiNode.classList.toggle("village-agent-ui--hovered", hovered);
       profile.classList.toggle("village-agent-ui__profile--visible", hovered);
       profile.setAttribute("aria-hidden", String(!hovered));
