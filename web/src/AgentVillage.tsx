@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import type { Agent, Message, ProjectSummary, VillageProject, VillageSnapshot } from "./types";
 import { footPointIsBlocked, VILLAGE_LEVEL, type MapPoint } from "./villageLevel";
 import { navigationDiagnostics, planRandomPath, stationExitDiagnostics, type RandomPathState } from "./villageNavigation";
+import { groundedSpriteY, SHADOW_CENTER_Y, SHADOW_HEIGHT, SHADOW_WIDTH } from "./villageSpriteGeometry";
 
 const PROJECTS_PER_DISTRICT = 6;
 const MAX_VISIBLE_AGENTS_PER_PROJECT = 8;
@@ -19,7 +20,6 @@ const WORLD_DEPTH_BASE = 100;
 const ACTOR_UI_DEPTH_BASE = 12_000;
 const HOVERED_ACTOR_UI_DEPTH = ACTOR_UI_DEPTH_BASE + MAP_HEIGHT + 1;
 const AGENT_FOOT_RADIUS = 8;
-const SPRITE_FOOT_OFFSET = 2;
 const COLLISION_DEBUG_QUERY = "collisionDebug";
 const VILLAGE_ASSET_VERSION = import.meta.env.VITE_VILLAGE_ASSET_VERSION || "development";
 
@@ -298,10 +298,12 @@ class CommonsVillageScene extends Phaser.Scene {
         .setPosition(actor.container.x, actor.container.y)
         .setDepth(actorUiDepth(actor.container.y, actor.hovered));
       const direction = actor.movement?.motion.direction || "down";
+      const renderedScale = actor.spriteScale * (actor.hovered ? 1.06 : 1);
+      actor.sprite.setScale(renderedScale);
       if (actor.moving) {
         const key = animationKey(actor.spriteIndex, direction);
         actor.sprite.play(key, true);
-        actor.sprite.setY(SPRITE_FOOT_OFFSET * actor.spriteScale);
+        actor.sprite.setY(groundedSpriteY(actor.sprite.frame.name, renderedScale));
         actor.dust.setAlpha(0.32 + Math.abs(Math.sin(this.elapsed * 11 + actor.phase)) * 0.38);
         actor.dust.setX(direction === "left" ? 7 * actor.uiScale : direction === "right" ? -7 * actor.uiScale : 0);
         actor.sweat.setAlpha(0);
@@ -318,14 +320,11 @@ class CommonsVillageScene extends Phaser.Scene {
         actor.sprite.stop();
         actor.sprite.setFrame(idleFrame);
         const wave = Math.sin(this.elapsed * (actor.working ? 6.6 : 1.3) + actor.phase);
-        actor.sprite.setY(
-          SPRITE_FOOT_OFFSET * actor.spriteScale + (actor.working ? Math.round(wave * 0.7) : wave * 0.3),
-        );
+        actor.sprite.setY(groundedSpriteY(idleFrame, renderedScale));
         actor.dust.setAlpha(0);
         actor.sweat.setAlpha(actor.working ? 0.45 + Math.max(0, wave) * 0.55 : 0);
         actor.sweat.setY(-67 * actor.sprite.scaleY + ((this.elapsed * 9 + actor.phase) % 6));
       }
-      actor.sprite.setScale(actor.spriteScale * (actor.hovered ? 1.06 : 1));
       if (actor.statusElement) {
         const wave = Math.sin(this.elapsed * 5 + actor.phase);
         actor.statusElement.style.opacity = String(
@@ -710,17 +709,17 @@ class CommonsVillageScene extends Phaser.Scene {
 
     const shadow = this.add.ellipse(
       0,
-      1 * spriteScale,
-      30 * spriteScale,
-      6 * spriteScale,
+      SHADOW_CENTER_Y * spriteScale,
+      SHADOW_WIDTH * spriteScale,
+      SHADOW_HEIGHT * spriteScale,
       0x173334,
-      0.38,
+      0.34,
     );
     const dust = this.add.graphics();
     dust.fillStyle(0xe9d6a0, 1).fillRect(-9 * uiScale, -2 * uiScale, 4 * uiScale, 3 * uiScale);
     dust.fillStyle(0xffebbd, 1).fillRect(6 * uiScale, -4 * uiScale, 3 * uiScale, 3 * uiScale);
     dust.setAlpha(0);
-    const sprite = this.add.sprite(0, SPRITE_FOOT_OFFSET * spriteScale, textureKey, 0).setOrigin(0.5, 1).setScale(spriteScale);
+    const sprite = this.add.sprite(0, groundedSpriteY(0, spriteScale), textureKey, 0).setOrigin(0.5, 1).setScale(spriteScale);
     const sweat = this.add.graphics();
     sweat.fillStyle(0x8de9f2, 1).fillRect(20 * spriteScale, 0, 3 * uiScale, 6 * uiScale);
     sweat.fillStyle(0xc4f7fa, 1).fillRect(25 * spriteScale, 6 * uiScale, 2 * uiScale, 4 * uiScale);
@@ -1087,7 +1086,7 @@ export default function AgentVillage({ snapshot, fallbackProjects, loading, erro
         host.dataset.roamingPolicy = "available-agents-only";
         host.dataset.assetLayerModel = "flat-base-independent-transparent-sprites";
         host.dataset.occlusionStrategy = "foreground-alpha-fade";
-        host.dataset.characterGrounding = "foot-aligned-shadow";
+        host.dataset.characterGrounding = "frame-aware-footline";
         host.dataset.navigationCellSize = String(VILLAGE_LEVEL.navigation.cellSize);
         host.dataset.navigationWalkableCellCount = String(metrics.navigationWalkableCellCount);
         host.dataset.navigationComponentCount = String(metrics.navigationComponentCount);

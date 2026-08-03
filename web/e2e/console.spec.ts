@@ -177,7 +177,7 @@ test("Workspace overview renders a live interactive Phaser Agent village", async
   await expect(stage).toHaveAttribute("data-roaming-policy", "available-agents-only");
   await expect(stage).toHaveAttribute("data-asset-layer-model", "flat-base-independent-transparent-sprites");
   await expect(stage).toHaveAttribute("data-occlusion-strategy", "foreground-alpha-fade");
-  await expect(stage).toHaveAttribute("data-character-grounding", "foot-aligned-shadow");
+  await expect(stage).toHaveAttribute("data-character-grounding", "frame-aware-footline");
   await expect(stage).toHaveAttribute("data-navigation-cell-size", "16");
   await expect(stage).toHaveAttribute("data-navigation-walkable-cell-count", /^(?:[1-9]\d{3,})$/);
   await expect(stage).toHaveAttribute("data-navigation-component-count", "1");
