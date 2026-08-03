@@ -30,6 +30,8 @@ import { FormEvent, lazy, Suspense, useCallback, useEffect, useMemo, useRef, use
 import {
   ApiError,
   getAgentDetail,
+  getDayActivity,
+  getDirectory,
   getOverview,
   getProjectAgents,
   getProjectBroadcasts,
@@ -42,11 +44,18 @@ import {
   logout,
 } from "./api";
 import type {
+  ActivityCalendarDay,
   ActivityEvent,
   Agent,
   AgentDetail,
   AgentsPage,
   ConsoleView,
+  DayActivity,
+  DayActivityEvent,
+  DirectoryAgent,
+  DirectoryProjectSummary,
+  DirectorySnapshot,
+  DirectoryUser,
   Lease,
   LeasesPage,
   Message,
@@ -60,6 +69,9 @@ import type {
   VillageSnapshot,
   WorkspaceBroadcast,
 } from "./types";
+
+type WorkspaceView = "overview" | "directory";
+type DirectoryMode = "projects" | "agents" | "people";
 
 type WorkspaceFilter = "all" | "active_agents" | "active_tasks" | "blocked" | "broadcasts";
 type AgentFilter = "active" | "all" | "online" | "idle" | "offline";
@@ -471,6 +483,243 @@ function WorkspaceOverview({
   );
 }
 
+function userInitials(user: DirectoryUser): string {
+  const source = (user.user_name || user.user_slug || "?").trim();
+  const pieces = source.split(/[\s-]+/).filter(Boolean);
+  if (!pieces.length) return "?";
+  if (pieces.length === 1) return pieces[0].slice(0, 2).toUpperCase();
+  return `${pieces[0][0]}${pieces[pieces.length - 1][0]}`.toUpperCase();
+}
+
+function DirectoryUserRow({ user, onProject }: { user: DirectoryUser; onProject: (projectId: string) => void }) {
+  return (
+    <tr>
+      <td>
+        <span className="directory-user">
+          <span className={`directory-user__avatar ${user.user_slug ? "" : "directory-user__avatar--unknown"}`} aria-hidden="true">{userInitials(user)}</span>
+          <span className="directory-user__identity">
+            <strong>{user.user_name || "Unattributed"}</strong>
+            <small>{user.user_slug ? `@${user.user_slug}-*` : "Legacy Agents without a Commons user"}</small>
+          </span>
+        </span>
+      </td>
+      <td>
+        <span className="directory-project-chips">
+          {user.projects.map((project) => (
+            <button className="directory-project-chip" type="button" key={project.project_id} onClick={() => onProject(project.project_id)} title={`Open ${project.display_name}`}>
+              <span className={project.active_agent_count ? "project-strip__signal project-strip__signal--active" : "project-strip__signal"} />
+              {project.display_name}
+              <small>{project.active_agent_count}/{project.agent_count}</small>
+            </button>
+          ))}
+        </span>
+      </td>
+      <td className="directory-cell--count"><strong>{user.active_agent_count}</strong><span> / {user.agent_count}</span><small>active / registered</small></td>
+      <td className="directory-cell--runtimes">{user.runtimes.map((runtime) => <span className="runtime-chip" key={runtime}>{runtime}</span>)}</td>
+      <td className="directory-cell--seen">
+        <span className={`presence-dot presence-dot--${user.active_agent_count ? "online" : "offline"}`} />
+        {formatRelative(user.last_seen_at)}
+      </td>
+    </tr>
+  );
+}
+
+function DirectoryAgentRow({ agent, onAgent, onProject }: { agent: DirectoryAgent; onAgent: (projectId: string, agent: Agent) => void; onProject: (projectId: string) => void }) {
+  return (
+    <tr>
+      <td>
+        <button className="directory-entity" type="button" onClick={() => onAgent(agent.project_id, agent)} title={`Open ${agentLabel(agent)}`}>
+          <AgentAvatar agent={agent} size="small" />
+          <span className="directory-user__identity">
+            <strong>{agentLabel(agent)}</strong>
+            <small>{agent.name || agent.agent_id}</small>
+          </span>
+        </button>
+      </td>
+      <td>
+        <span className="directory-user__identity">
+          <strong>{agent.user_name || "Unattributed"}</strong>
+          <small>{agent.user_slug ? `@${agent.user_slug}-*` : "No Commons user recorded"}</small>
+        </span>
+      </td>
+      <td>
+        <button className="directory-project-chip" type="button" onClick={() => onProject(agent.project_id)} title={`Open ${agent.project_display_name}`}>
+          <span className={agent.presence !== "offline" ? "project-strip__signal project-strip__signal--active" : "project-strip__signal"} />
+          {agent.project_display_name}
+        </button>
+      </td>
+      <td className="directory-cell--runtimes"><span className="runtime-chip">{agent.runtime}</span></td>
+      <td className="directory-cell--seen">
+        <span className="directory-presence">
+          <PresenceLabel presence={agent.presence} />
+          <small>{formatRelative(agent.last_seen_at)}</small>
+        </span>
+      </td>
+    </tr>
+  );
+}
+
+function DirectoryProjectRow({ project, onProject }: { project: DirectoryProjectSummary; onProject: (projectId: string) => void }) {
+  return (
+    <tr>
+      <td>
+        <button className="directory-entity" type="button" onClick={() => onProject(project.project_id)} title={`Open ${project.display_name}`}>
+          <span className="directory-project-icon" aria-hidden="true"><Boxes size={16} /></span>
+          <span className="directory-user__identity">
+            <strong>{project.display_name}</strong>
+            <small>{project.description || project.project_id}</small>
+          </span>
+        </button>
+      </td>
+      <td>
+        <span className="directory-project-chips">
+          {project.user_names.map((name) => <span className="people-chip" key={name}>{name}</span>)}
+          {project.unattributed_agent_count > 0 && <span className="people-chip people-chip--muted">{project.unattributed_agent_count} unattributed</span>}
+          {!project.user_names.length && !project.unattributed_agent_count && <span className="people-chip people-chip--muted">No participants</span>}
+        </span>
+      </td>
+      <td className="directory-cell--count"><strong>{project.active_agent_count}</strong><span> / {project.agent_count}</span><small>active / registered</small></td>
+      <td className="directory-cell--count"><strong>{project.active_task_count}</strong><span> active</span><small>{project.blocked_task_count ? `${project.blocked_task_count} blocked` : "no blockers"}</small></td>
+      <td className="directory-cell--seen">
+        <span className={`presence-dot presence-dot--${project.active_agent_count ? "online" : "offline"}`} />
+        {formatRelative(project.last_activity_at)}
+      </td>
+    </tr>
+  );
+}
+
+const DIRECTORY_MODES: Array<{ value: DirectoryMode; label: string }> = [
+  { value: "projects", label: "Projects" },
+  { value: "agents", label: "Agents" },
+  { value: "people", label: "People" },
+];
+
+const DIRECTORY_COPY: Record<DirectoryMode, { title: string; description: string }> = {
+  projects: { title: "Projects", description: "Every coordination scope on this Relay and the people participating in it." },
+  agents: { title: "Agents", description: "Every registered Agent and the human who controls it." },
+  people: { title: "People", description: "Everyone participating in this workspace, grouped from human-attributed Agent identity." },
+};
+
+function DirectoryView({
+  directory,
+  loading,
+  error,
+  query,
+  onRetry,
+  onProject,
+  onAgent,
+}: {
+  directory: DirectorySnapshot | null;
+  loading: boolean;
+  error: string;
+  query: string;
+  onRetry: () => void;
+  onProject: (projectId: string) => void;
+  onAgent: (projectId: string, agent: Agent) => void;
+}) {
+  const [mode, setMode] = useState<DirectoryMode>("people");
+
+  const users = useMemo(() => {
+    if (!directory) return [];
+    if (!query) return directory.users;
+    return directory.users.filter((user) =>
+      `${user.user_name || ""} ${user.user_slug || ""} ${user.runtimes.join(" ")} ${user.projects.map((project) => `${project.display_name} ${project.project_id}`).join(" ")}`
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [directory, query]);
+
+  const agents = useMemo(() => {
+    if (!directory) return [];
+    if (!query) return directory.agents;
+    return directory.agents.filter((agent) =>
+      `${agent.handle || ""} ${agent.name || ""} ${agent.agent_id} ${agent.user_name || ""} ${agent.user_slug || ""} ${agent.runtime} ${agent.project_display_name} ${agent.project_id}`
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [directory, query]);
+
+  const projects = useMemo(() => {
+    if (!directory) return [];
+    if (!query) return directory.projects;
+    return directory.projects.filter((project) =>
+      `${project.display_name} ${project.project_id} ${project.description || ""} ${project.user_names.join(" ")}`
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [directory, query]);
+
+  if (!directory) {
+    if (loading) return <div className="content-skeleton" aria-label="Loading workspace directory" aria-busy="true"><span /><span /><span /></div>;
+    return (
+      <div className="view-stack">
+        <EmptyState icon={AlertTriangle} title="Directory unavailable" body={error || "Retry the directory request."} />
+        <button className="primary-button" type="button" onClick={onRetry}><RefreshCw size={16} /> Retry</button>
+      </div>
+    );
+  }
+
+  const copy = DIRECTORY_COPY[mode];
+  const shownCount = mode === "people" ? users.length : mode === "agents" ? agents.length : projects.length;
+
+  return (
+    <div className="view-stack directory-overview">
+      <div className="metrics-row" aria-label="Directory summary">
+        <MetricButton icon={Boxes} label="Projects" value={directory.totals.projects} detail="Coordination scopes on this Relay" tone="plain" onClick={() => setMode("projects")} pressed={mode === "projects"} />
+        <MetricButton icon={Users} label="People" value={directory.totals.users} detail="Humans attributed to Agents" tone="teal" onClick={() => setMode("people")} pressed={mode === "people"} />
+        <MetricButton icon={Bot} label="Active / registered" value={`${directory.totals.active_agents} / ${directory.totals.registered_agents}`} detail="Agents across all projects" tone="yellow" onClick={() => setMode("agents")} pressed={mode === "agents"} />
+        <MetricButton icon={AlertTriangle} label="Unattributed" value={directory.totals.unattributed_agents} detail="Legacy Agents without a user" tone="coral" onClick={() => setMode("agents")} pressed={false} />
+      </div>
+
+      <section className="content-section" aria-labelledby="directory-table-title">
+        <div className="section-heading">
+          <div><h2 id="directory-table-title">{copy.title}</h2><p>{copy.description}</p></div>
+          <span>{shownCount} shown</span>
+        </div>
+        <div className="view-toolbar">
+          <FilterTabs label="Directory view" value={mode} options={DIRECTORY_MODES} onChange={setMode} />
+        </div>
+        {mode === "people" && (users.length ? (
+          <div className="directory-table-wrap">
+            <table className="directory-table">
+              <thead>
+                <tr><th scope="col">User</th><th scope="col">Projects</th><th scope="col">Agents</th><th scope="col">Runtimes</th><th scope="col">Last seen</th></tr>
+              </thead>
+              <tbody>
+                {users.map((user) => <DirectoryUserRow user={user} onProject={onProject} key={user.user_slug || "unattributed"} />)}
+              </tbody>
+            </table>
+          </div>
+        ) : <EmptyState icon={Users} title="No matching people" body="Clear the search or register Agents with a Commons user name." />)}
+        {mode === "agents" && (agents.length ? (
+          <div className="directory-table-wrap">
+            <table className="directory-table">
+              <thead>
+                <tr><th scope="col">Agent</th><th scope="col">Controlled by</th><th scope="col">Project</th><th scope="col">Runtime</th><th scope="col">Last seen</th></tr>
+              </thead>
+              <tbody>
+                {agents.map((agent) => <DirectoryAgentRow agent={agent} onAgent={onAgent} onProject={onProject} key={`${agent.project_id}:${agent.agent_id}`} />)}
+              </tbody>
+            </table>
+          </div>
+        ) : <EmptyState icon={Bot} title="No matching agents" body="Clear the search or register an Agent on this Relay." />)}
+        {mode === "projects" && (projects.length ? (
+          <div className="directory-table-wrap">
+            <table className="directory-table">
+              <thead>
+                <tr><th scope="col">Project</th><th scope="col">People</th><th scope="col">Agents</th><th scope="col">Tasks</th><th scope="col">Last activity</th></tr>
+              </thead>
+              <tbody>
+                {projects.map((project) => <DirectoryProjectRow project={project} onProject={onProject} key={project.project_id} />)}
+              </tbody>
+            </table>
+          </div>
+        ) : <EmptyState icon={Boxes} title="No matching projects" body="Clear the search to see every Relay project." />)}
+      </section>
+    </div>
+  );
+}
+
 function ProjectOverviewView({
   detail,
   onAgent,
@@ -634,29 +883,153 @@ function ResourcesView({ leases, filter, onFilter, ...paging }: { leases: Lease[
   );
 }
 
-function RailHeader({ live }: { live: boolean }) {
+function calendarHeatLevel(total: number): number {
+  if (total <= 0) return 0;
+  if (total <= 2) return 1;
+  if (total <= 5) return 2;
+  if (total <= 11) return 3;
+  return 4;
+}
+
+function calendarDayTitle(label: string, day: ActivityCalendarDay | undefined): string {
+  if (!day || !day.total) return `${label}: no coordination activity`;
+  const parts = [
+    day.tasks && `${day.tasks} task ${day.tasks === 1 ? "event" : "events"}`,
+    day.messages && `${day.messages} ${day.messages === 1 ? "message" : "messages"}`,
+    day.leases && `${day.leases} lease ${day.leases === 1 ? "event" : "events"}`,
+    day.agents && `${day.agents} agent ${day.agents === 1 ? "event" : "events"}`,
+    day.other && `${day.other} other`,
+  ].filter(Boolean);
+  return `${label}: ${day.total} ${day.total === 1 ? "event" : "events"} — ${parts.join(", ")}`;
+}
+
+function RailHeader({
+  live,
+  calendar,
+  selectedDay = null,
+  onSelectDay,
+}: {
+  live: boolean;
+  calendar?: ActivityCalendarDay[] | null;
+  selectedDay?: string | null;
+  onSelectDay?: (date: string) => void;
+}) {
   const today = new Date();
+  const byDate = new Map((calendar || []).map((day) => [day.date, day]));
   return (
     <>
       <div className="activity-rail__header">
         <div><strong>{new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(today)}</strong><span>{new Intl.DateTimeFormat("en", { weekday: "long" }).format(today)}</span></div>
         <span className={`live-state ${live ? "live-state--on" : ""}`}><Radio size={14} />{live ? "Live" : "Reconnecting"}</span>
       </div>
-      <div className="activity-calendar" aria-hidden="true">
+      <div className="activity-calendar" aria-label="Coordination activity over the last seven days" role="group">
         {Array.from({ length: 7 }, (_, index) => {
           const date = new Date(today);
-          date.setDate(today.getDate() - 3 + index);
-          return <span className={index === 3 ? "selected" : ""} key={date.toISOString()}><small>{new Intl.DateTimeFormat("en", { weekday: "narrow" }).format(date)}</small>{date.getDate()}</span>;
+          date.setDate(today.getDate() - 6 + index);
+          const key = date.toISOString().slice(0, 10);
+          const day = byDate.get(key);
+          const label = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date);
+          const classes = [index === 6 ? "selected" : "", selectedDay === key ? "viewing" : ""].filter(Boolean).join(" ");
+          return (
+            <button
+              className={classes || undefined}
+              type="button"
+              key={key}
+              title={calendarDayTitle(label, day)}
+              aria-pressed={selectedDay === key}
+              aria-label={`Show activity for ${label}`}
+              onClick={onSelectDay ? () => onSelectDay(key) : undefined}
+              disabled={!onSelectDay}
+            >
+              <small>{new Intl.DateTimeFormat("en", { weekday: "narrow" }).format(date)}</small>
+              {date.getDate()}
+              <i className={`calendar-heat calendar-heat--${calendarHeatLevel(day?.total || 0)}`} aria-hidden="true" />
+            </button>
+          );
         })}
       </div>
     </>
   );
 }
 
-function ActivityRail({ events, live, onEvent }: { events: ActivityEvent[]; live: boolean; onEvent: (event: ActivityEvent) => void }) {
+const DAY_GROUPS: Array<{ key: string; label: string; icon: LucideIcon; match: (type: string) => boolean }> = [
+  { key: "tasks", label: "Tasks", icon: CircleDot, match: (type) => type.startsWith("task") },
+  { key: "messages", label: "Messages", icon: Send, match: (type) => type.startsWith("message") },
+  { key: "leases", label: "Resources", icon: KeyRound, match: (type) => type.startsWith("lease") || type.startsWith("deploy") || type.startsWith("operation") },
+  { key: "agents", label: "Agents", icon: Bot, match: (type) => type.startsWith("agent") },
+  { key: "other", label: "Other", icon: Activity, match: () => true },
+];
+
+function DaySummaryRail({
+  date,
+  detail,
+  loading,
+  error,
+  live,
+  calendar,
+  showProject,
+  onSelectDay,
+  onClose,
+  onEvent,
+}: {
+  date: string;
+  detail: DayActivity | null;
+  loading: boolean;
+  error: string;
+  live: boolean;
+  calendar?: ActivityCalendarDay[] | null;
+  showProject: boolean;
+  onSelectDay: (date: string) => void;
+  onClose: () => void;
+  onEvent: (event: DayActivityEvent) => void;
+}) {
+  const label = new Intl.DateTimeFormat("en", { weekday: "long", month: "short", day: "numeric" }).format(new Date(`${date}T12:00:00Z`));
+  const groups = DAY_GROUPS.map((group) => ({ ...group, events: [] as DayActivityEvent[] }));
+  (detail?.events || []).forEach((event) => {
+    const group = groups.find((candidate) => candidate.match(event.event_type));
+    if (group) group.events.push(event);
+  });
+  const populated = groups.filter((group) => group.events.length);
+  return (
+    <aside className="activity-rail" aria-label={`Coordination activity on ${label}`}>
+      <RailHeader live={live} calendar={calendar} selectedDay={date} onSelectDay={onSelectDay} />
+      <div className="timeline-heading"><span>{label}</span><button className="day-summary__close" type="button" onClick={onClose}>Back to live <X size={12} /></button></div>
+      {loading && !detail ? (
+        <div className="rail-skeleton" aria-hidden="true"><span /><span /><span /><span /></div>
+      ) : error && !detail ? (
+        <EmptyState icon={AlertTriangle} title="Day unavailable" body={error} />
+      ) : !detail || !detail.totals.total ? (
+        <EmptyState icon={Activity} title="A quiet day" body={`No coordination events were recorded on ${label}.`} />
+      ) : (
+        <div className="day-summary">
+          {populated.map((group) => {
+            const GroupIcon = group.icon;
+            return (
+              <section className="day-summary__group" key={group.key} aria-label={`${group.label} events`}>
+                <div className="day-summary__group-heading"><GroupIcon size={14} /><span>{group.label}</span><small>{group.events.length}</small></div>
+                {group.events.map((event) => (
+                  <button className={`day-summary__event day-summary__event--${eventTone(event.event_type)}`} type="button" key={event.event_id} onClick={() => onEvent(event)}>
+                    <span className="day-summary__body">
+                      <strong>{event.actor_handle ? `@${event.actor_handle}` : event.actor_agent_id || "Relay"}</strong>
+                      <span>{eventSummary(event)}</span>
+                      <small>{showProject && event.project_display_name ? `${event.project_display_name} · ` : ""}{formatClock(event.created_at)}</small>
+                    </span>
+                    <ChevronRight size={13} />
+                  </button>
+                ))}
+              </section>
+            );
+          })}
+        </div>
+      )}
+    </aside>
+  );
+}
+
+function ActivityRail({ events, live, calendar, selectedDay, onSelectDay, onEvent }: { events: ActivityEvent[]; live: boolean; calendar?: ActivityCalendarDay[] | null; selectedDay?: string | null; onSelectDay?: (date: string) => void; onEvent: (event: ActivityEvent) => void }) {
   return (
     <aside className="activity-rail" aria-label="Project activity timeline">
-      <RailHeader live={live} />
+      <RailHeader live={live} calendar={calendar} selectedDay={selectedDay} onSelectDay={onSelectDay} />
       <div className="timeline-heading"><span>Project activity</span><small>{events.length} recent events</small></div>
       <div className="timeline">
         {events.length ? events.slice(0, 30).map((event) => {
@@ -678,10 +1051,10 @@ function ActivityRail({ events, live, onEvent }: { events: ActivityEvent[]; live
   );
 }
 
-function WorkspaceBroadcastRail({ broadcasts, live, onBroadcast }: { broadcasts: WorkspaceBroadcast[]; live: boolean; onBroadcast: (message: WorkspaceBroadcast) => void }) {
+function WorkspaceBroadcastRail({ broadcasts, live, calendar, selectedDay, onSelectDay, onBroadcast }: { broadcasts: WorkspaceBroadcast[]; live: boolean; calendar?: ActivityCalendarDay[] | null; selectedDay?: string | null; onSelectDay?: (date: string) => void; onBroadcast: (message: WorkspaceBroadcast) => void }) {
   return (
     <aside className="activity-rail" aria-label="Workspace broadcasts">
-      <RailHeader live={live} />
+      <RailHeader live={live} calendar={calendar} selectedDay={selectedDay} onSelectDay={onSelectDay} />
       <div className="timeline-heading"><span>Workspace broadcasts</span><small>{broadcasts.length} recent</small></div>
       <div className="workspace-broadcast-list">
         {broadcasts.length ? broadcasts.map((message) => (
@@ -793,6 +1166,14 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
   const [village, setVillage] = useState<VillageSnapshot | null>(null);
   const [villageLoading, setVillageLoading] = useState(true);
   const [villageError, setVillageError] = useState("");
+  const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("overview");
+  const [directory, setDirectory] = useState<DirectorySnapshot | null>(null);
+  const [directoryLoading, setDirectoryLoading] = useState(false);
+  const [directoryError, setDirectoryError] = useState("");
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [dayDetail, setDayDetail] = useState<DayActivity | null>(null);
+  const [dayLoading, setDayLoading] = useState(false);
+  const [dayError, setDayError] = useState("");
   const [projectId, setProjectId] = useState("");
   const [detail, setDetail] = useState<ProjectOverviewDetail | null>(null);
   const [view, setView] = useState<ConsoleView>("overview");
@@ -824,7 +1205,10 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
   const viewRequestId = useRef(0);
   const agentRequestId = useRef(0);
   const selectedProjectId = useRef("");
+  const workspaceViewRef = useRef<WorkspaceView>("overview");
   const selectedAgentRef = useRef<Agent | null>(null);
+  const dayRequestId = useRef(0);
+  const selectedDayRef = useRef<string | null>(null);
   const currentViewRequestKey = useRef("");
   const projectCache = useRef(new Map<string, ProjectOverviewDetail>());
 
@@ -861,6 +1245,45 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
       setVillageError(caught instanceof Error ? caught.message : "Unable to load the Agent village.");
     } finally {
       setVillageLoading(false);
+    }
+  }, [onUnauthorized]);
+
+  const refreshDirectory = useCallback(async () => {
+    try {
+      const next = await getDirectory();
+      setDirectory(next);
+      setDirectoryError("");
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.status === 401) {
+        onUnauthorized();
+        return;
+      }
+      setDirectoryError(caught instanceof Error ? caught.message : "Unable to load the workspace directory.");
+    } finally {
+      setDirectoryLoading(false);
+    }
+  }, [onUnauthorized]);
+
+  const openDay = useCallback(async (date: string) => {
+    const requestId = ++dayRequestId.current;
+    selectedDayRef.current = date;
+    setSelectedDay(date);
+    setDayDetail(null);
+    setDayError("");
+    setDayLoading(true);
+    try {
+      const next = await getDayActivity(date, selectedProjectId.current || undefined);
+      if (requestId !== dayRequestId.current) return;
+      setDayDetail(next);
+    } catch (caught) {
+      if (requestId !== dayRequestId.current) return;
+      if (caught instanceof ApiError && caught.status === 401) {
+        onUnauthorized();
+        return;
+      }
+      setDayError(caught instanceof Error ? caught.message : "Unable to load activity for this day.");
+    } finally {
+      if (requestId === dayRequestId.current) setDayLoading(false);
     }
   }, [onUnauthorized]);
 
@@ -992,6 +1415,7 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
       refreshTimer.current = window.setTimeout(() => {
         void refreshOverview();
         void refreshVillage();
+        if (workspaceViewRef.current === "directory" && !selectedProjectId.current) void refreshDirectory();
         if (projectId) void refreshProject(projectId);
         if (projectId && view !== "overview") setViewRefreshVersion((current) => current + 1);
       }, 250);
@@ -1000,25 +1424,40 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
       stream.close();
       if (refreshTimer.current != null) window.clearTimeout(refreshTimer.current);
     };
-  }, [projectId, refreshOverview, refreshProject, refreshVillage, streamReady, view]);
+  }, [projectId, refreshDirectory, refreshOverview, refreshProject, refreshVillage, streamReady, view]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
       if (document.visibilityState !== "visible") return;
       void refreshOverview();
       void refreshVillage();
+      if (workspaceViewRef.current === "directory" && !selectedProjectId.current) void refreshDirectory();
       if (projectId) void refreshProject(projectId);
       if (projectId && view !== "overview") setViewRefreshVersion((current) => current + 1);
       if (selectedAgentRef.current) setAgentRefreshVersion((current) => current + 1);
     }, 20000);
     return () => window.clearInterval(interval);
-  }, [projectId, refreshOverview, refreshProject, refreshVillage, view]);
+  }, [projectId, refreshDirectory, refreshOverview, refreshProject, refreshVillage, view]);
 
   const activeDetail = detail?.project.project_id === projectId ? detail : null;
   const projectIsLoading = Boolean(projectId && projectLoadingId === projectId && !activeDetail);
   const selectedProject = overview?.projects.find((project) => project.project_id === projectId) || null;
   const currentTitle = PROJECT_NAV_ITEMS.find((item) => item.id === view)?.label || "Overview";
   const normalizedQuery = query.trim().toLowerCase();
+
+  function closeDay() {
+    dayRequestId.current += 1;
+    selectedDayRef.current = null;
+    setSelectedDay(null);
+    setDayDetail(null);
+    setDayError("");
+    setDayLoading(false);
+  }
+
+  function toggleDay(date: string) {
+    if (selectedDayRef.current === date) closeDay();
+    else void openDay(date);
+  }
 
   function openWorkspace(filter: WorkspaceFilter = "all") {
     selectedProjectId.current = "";
@@ -1028,14 +1467,38 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
     setDetail(null);
     setProjectLoadingId(null);
     setView("overview");
+    workspaceViewRef.current = "overview";
+    setWorkspaceView("overview");
     setWorkspaceFilter(filter);
     setQuery("");
     closeAgent();
+    closeDay();
     setSelectedMessage(null);
+  }
+
+  function openDirectory() {
+    selectedProjectId.current = "";
+    projectRequestId.current += 1;
+    viewRequestId.current += 1;
+    setProjectId("");
+    setDetail(null);
+    setProjectLoadingId(null);
+    setView("overview");
+    workspaceViewRef.current = "directory";
+    setWorkspaceView("directory");
+    setWorkspaceFilter("all");
+    setQuery("");
+    closeAgent();
+    closeDay();
+    setSelectedMessage(null);
+    if (!directory) setDirectoryLoading(true);
+    void refreshDirectory();
   }
 
   function openProject(id: string, nextView: ConsoleView = "overview") {
     selectedProjectId.current = id;
+    workspaceViewRef.current = "overview";
+    setWorkspaceView("overview");
     projectRequestId.current += 1;
     viewRequestId.current += 1;
     setProjectId(id);
@@ -1046,6 +1509,7 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
     setError("");
     setQuery("");
     closeAgent();
+    closeDay();
     setSelectedMessage(null);
   }
 
@@ -1084,6 +1548,8 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
 
   function openWorkspaceBroadcast(message: WorkspaceBroadcast) {
     selectedProjectId.current = message.project_id;
+    workspaceViewRef.current = "overview";
+    setWorkspaceView("overview");
     projectRequestId.current += 1;
     viewRequestId.current += 1;
     setProjectId(message.project_id);
@@ -1092,6 +1558,7 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
     setProjectLoadingId(cached ? null : message.project_id);
     setView("broadcasts");
     setQuery("");
+    closeDay();
     setSelectedMessage(message);
   }
 
@@ -1224,8 +1691,9 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
         <nav className="side-nav" aria-label="Console navigation">
           <BrandMark compact />
           <div className="side-nav__items">
-            <button className={`nav-button ${!projectId && workspaceFilter === "all" ? "nav-button--active" : ""}`} type="button" onClick={() => openWorkspace("all")} title="Workspace overview" aria-label="Workspace overview"><LayoutDashboard size={19} /></button>
-            <button className={`nav-button ${!projectId && workspaceFilter !== "all" ? "nav-button--active" : ""}`} type="button" onClick={() => { openWorkspace("all"); scrollToProjects(); }} title="Projects" aria-label="Projects"><Boxes size={19} /></button>
+            <button className={`nav-button ${!projectId && workspaceView === "overview" && workspaceFilter === "all" ? "nav-button--active" : ""}`} type="button" onClick={() => openWorkspace("all")} title="Workspace overview" aria-label="Workspace overview"><LayoutDashboard size={19} /></button>
+            <button className={`nav-button ${!projectId && workspaceView === "overview" && workspaceFilter !== "all" ? "nav-button--active" : ""}`} type="button" onClick={() => { openWorkspace("all"); scrollToProjects(); }} title="Projects" aria-label="Projects"><Boxes size={19} /></button>
+            <button className={`nav-button ${!projectId && workspaceView === "directory" ? "nav-button--active" : ""}`} type="button" onClick={openDirectory} title="Directory" aria-label="Directory"><Users size={19} /></button>
           </div>
           <button className="nav-button nav-button--logout" type="button" onClick={signOut} title="Sign out" aria-label="Sign out"><LogOut size={18} /></button>
         </nav>
@@ -1235,7 +1703,7 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
             <ProjectStrip projects={overview?.projects || []} projectId={projectId} onWorkspace={() => openWorkspace("all")} onProject={openProject} />
             <div className="search-field">
               <Search size={16} aria-hidden="true" />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={projectId ? `Search ${currentTitle.toLowerCase()}` : "Search projects"} aria-label={projectId ? `Search ${currentTitle.toLowerCase()}` : "Search projects"} />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={projectId ? `Search ${currentTitle.toLowerCase()}` : workspaceView === "directory" ? "Search directory" : "Search projects"} aria-label={projectId ? `Search ${currentTitle.toLowerCase()}` : workspaceView === "directory" ? "Search directory" : "Search projects"} />
             </div>
             <button className="icon-button" type="button" onClick={() => { void refreshOverview(); void refreshVillage(); if (projectId) void refreshProject(projectId, !activeDetail); if (projectId && view !== "overview") setViewRefreshVersion((current) => current + 1); }} title="Refresh data" aria-label="Refresh data"><RefreshCw size={17} /></button>
           </header>
@@ -1264,11 +1732,27 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
             {projectIsLoading && <div className="metrics-skeleton metrics-skeleton--project" aria-label="Loading project summary" aria-busy="true"><span /><span /><span /><span /></div>}
 
             {error && <div className="error-banner"><AlertTriangle size={17} /><span>{error}</span><button type="button" onClick={() => { void refreshOverview(); void refreshVillage(); if (projectId) void refreshProject(projectId, true); if (projectId && view !== "overview") setViewRefreshVersion((current) => current + 1); }}>Retry</button></div>}
-            {overviewLoading && !overview ? <div className="content-skeleton"><span /><span /><span /></div> : !overview ? null : !projectId ? <WorkspaceOverview overview={overview} village={village} villageLoading={villageLoading} villageError={villageError} filter={workspaceFilter} query={normalizedQuery} onFilter={setWorkspaceFilter} onProject={openProject} onAgent={openVillageAgent} onBroadcast={openWorkspaceBroadcast} /> : projectIsLoading ? <div className="content-skeleton" aria-label="Loading project details" aria-busy="true"><span /><span /><span /></div> : projectContent}
+            {overviewLoading && !overview ? <div className="content-skeleton"><span /><span /><span /></div> : !overview ? null : !projectId ? (workspaceView === "directory" ? <DirectoryView directory={directory} loading={directoryLoading} error={directoryError} query={normalizedQuery} onRetry={() => { setDirectoryLoading(true); void refreshDirectory(); }} onProject={openProject} onAgent={openVillageAgent} /> : <WorkspaceOverview overview={overview} village={village} villageLoading={villageLoading} villageError={villageError} filter={workspaceFilter} query={normalizedQuery} onFilter={setWorkspaceFilter} onProject={openProject} onAgent={openVillageAgent} onBroadcast={openWorkspaceBroadcast} />) : projectIsLoading ? <div className="content-skeleton" aria-label="Loading project details" aria-busy="true"><span /><span /><span /></div> : projectContent}
           </div>
         </div>
 
-        {projectId ? activeDetail ? <ActivityRail events={activeDetail.activity} live={live} onEvent={handleActivity} /> : <ProjectActivityPlaceholder live={live} loading={projectIsLoading} /> : <WorkspaceBroadcastRail broadcasts={overview?.recent_broadcasts || []} live={live} onBroadcast={openWorkspaceBroadcast} />}
+        {selectedDay ? (
+          <DaySummaryRail
+            date={selectedDay}
+            detail={dayDetail}
+            loading={dayLoading}
+            error={dayError}
+            live={live}
+            calendar={projectId ? activeDetail?.activity_calendar : overview?.activity_calendar}
+            showProject={!projectId}
+            onSelectDay={toggleDay}
+            onClose={closeDay}
+            onEvent={(event) => {
+              if (projectId) handleActivity(event);
+              else if (event.project_id) openProject(event.project_id);
+            }}
+          />
+        ) : projectId ? activeDetail ? <ActivityRail events={activeDetail.activity} live={live} calendar={activeDetail.activity_calendar} selectedDay={selectedDay} onSelectDay={toggleDay} onEvent={handleActivity} /> : <ProjectActivityPlaceholder live={live} loading={projectIsLoading} /> : <WorkspaceBroadcastRail broadcasts={overview?.recent_broadcasts || []} live={live} calendar={overview?.activity_calendar} selectedDay={selectedDay} onSelectDay={toggleDay} onBroadcast={openWorkspaceBroadcast} />}
       </section>
       {selectedAgent && activeDetail && <AgentDrawer agent={selectedAgent} detail={selectedAgentDetail} loading={agentDetailLoading} onClose={closeAgent} onMessage={setSelectedMessage} onLoadMore={loadMoreAgentMessages} />}
       {selectedMessage && <MessageDrawer message={selectedMessage} projectName={projectNameForMessage} onClose={() => setSelectedMessage(null)} />}

@@ -1,6 +1,8 @@
 import type {
   AgentDetail,
   AgentsPage,
+  DayActivity,
+  DirectorySnapshot,
   LeasesPage,
   MessagesPage,
   Overview,
@@ -57,6 +59,16 @@ export function getOverview(): Promise<Overview> {
 
 export function getVillage(): Promise<VillageSnapshot> {
   return request("/v1/console/village");
+}
+
+export function getDirectory(): Promise<DirectorySnapshot> {
+  return request("/v1/console/directory");
+}
+
+export function getDayActivity(date: string, projectId?: string): Promise<DayActivity> {
+  const query = new URLSearchParams({ date });
+  if (projectId) query.set("project_id", projectId);
+  return request(`/v1/console/day?${query.toString()}`);
 }
 
 export function getProject(projectId: string): Promise<ProjectDetail> {
