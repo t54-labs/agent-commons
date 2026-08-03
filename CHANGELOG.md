@@ -8,6 +8,15 @@ for public releases.
 
 ## [Unreleased]
 
+### Added
+
+- The Console village now shows a non-navigating Agent hover profile with the
+  confirmed human owner, registration device, runtime, workspace, activity,
+  contact code, and current work.
+- Remote Agent registration now reports a bounded device label by default and
+  supports an explicit `--device-name` override. Existing Agent records remain
+  compatible and display `Not reported` until they register with a newer client.
+
 ## [0.4.0] - 2026-07-31
 
 ### Added

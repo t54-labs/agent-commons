@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS agents (
   user_name TEXT,
   user_slug TEXT,
   runtime TEXT NOT NULL,
+  host TEXT,
   workspace TEXT,
   task_id TEXT,
   status TEXT NOT NULL DEFAULT 'online',
@@ -387,6 +388,8 @@ def ensure_agent_columns(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE agents ADD COLUMN user_name TEXT")
     if "user_slug" not in existing:
         conn.execute("ALTER TABLE agents ADD COLUMN user_slug TEXT")
+    if "host" not in existing:
+        conn.execute("ALTER TABLE agents ADD COLUMN host TEXT")
     conn.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS idx_agents_handle
@@ -714,7 +717,7 @@ def register_agent(payload: dict[str, Any], db: str | None = None) -> dict[str, 
     with connect(db) as conn, transaction(conn):
         existing = conn.execute(
             """
-            SELECT registered_at, handle, contact_code, name, user_name, user_slug
+            SELECT registered_at, handle, contact_code, name, user_name, user_slug, host
               FROM agents
              WHERE project_id = ? AND agent_id = ?
             """,
@@ -830,13 +833,21 @@ def register_agent(payload: dict[str, Any], db: str | None = None) -> dict[str, 
                 )
         registered_at = existing["registered_at"] if existing else ts
         contact_code = requested_code or (existing["contact_code"] if existing else None) or generate_contact_code(conn, project_id)
+        requested_host = str(payload.get("host") or "").strip() or None
+        if requested_host and (len(requested_host) > 128 or any(ord(character) < 32 for character in requested_host)):
+            raise RelayError(
+                "invalid Agent device name",
+                code="invalid_agent_host",
+                remediation="Use a printable device name no longer than 128 characters.",
+            )
+        host = requested_host or (str(existing["host"]) if existing and existing["host"] else None)
         conn.execute(
             """
             INSERT INTO agents(
               project_id, agent_id, handle, contact_code, name, user_name, user_slug,
-              runtime, workspace, task_id, status, registered_at, heartbeat_at
+              runtime, host, workspace, task_id, status, registered_at, heartbeat_at
             )
-            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'online', ?, ?)
+            VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'online', ?, ?)
             ON CONFLICT(project_id, agent_id) DO UPDATE SET
               handle = excluded.handle,
               contact_code = excluded.contact_code,
@@ -844,6 +855,7 @@ def register_agent(payload: dict[str, Any], db: str | None = None) -> dict[str, 
               user_name = excluded.user_name,
               user_slug = excluded.user_slug,
               runtime = excluded.runtime,
+              host = excluded.host,
               workspace = excluded.workspace,
               task_id = excluded.task_id,
               status = 'online',
@@ -858,6 +870,7 @@ def register_agent(payload: dict[str, Any], db: str | None = None) -> dict[str, 
                 user_name,
                 user_slug,
                 runtime,
+                host,
                 payload.get("workspace"),
                 payload.get("task_id"),
                 registered_at,
@@ -874,6 +887,7 @@ def register_agent(payload: dict[str, Any], db: str | None = None) -> dict[str, 
                 "contact_code": contact_code,
                 "user_name": user_name,
                 "user_slug": user_slug,
+                "host": host,
             },
             project_id,
             agent_id,

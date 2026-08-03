@@ -69,6 +69,8 @@ type SceneActor = {
   sweat: Phaser.GameObjects.Graphics;
   statusElement: HTMLSpanElement | null;
   bubble: HTMLDivElement | null;
+  profileElement: HTMLDivElement;
+  profileWidth: number;
   bubbleStartedAt: number;
   bubbleAboveY: number;
   bubbleBelowY: number;
@@ -142,6 +144,38 @@ function truncate(value: string, length: number): string {
 
 function agentName(agent: Agent): string {
   return agent.handle ? `@${agent.handle}` : agent.name || agent.agent_id;
+}
+
+function runtimeLabel(runtime: string): string {
+  if (runtime === "claude-code") return "Claude Code";
+  if (runtime === "codex") return "Codex";
+  return runtime.replace(/[-_]+/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function workspaceLabel(workspace: string | null): string {
+  if (!workspace) return "Not reported";
+  const segments = workspace.replace(/\\/g, "/").split("/").filter(Boolean);
+  return segments.at(-1) || workspace;
+}
+
+function deviceLabel(host: string | null): string {
+  if (!host) return "Not reported";
+  return host.replace(/\.local$/i, "");
+}
+
+function activityLabel(lastSeenSeconds: number): string {
+  if (!Number.isFinite(lastSeenSeconds) || lastSeenSeconds < 0) return "Not reported";
+  if (lastSeenSeconds < 60) return "Just now";
+  if (lastSeenSeconds < 3_600) return `${Math.floor(lastSeenSeconds / 60)}m ago`;
+  if (lastSeenSeconds < 86_400) return `${Math.floor(lastSeenSeconds / 3_600)}h ago`;
+  return `${Math.floor(lastSeenSeconds / 86_400)}d ago`;
+}
+
+function agentStateLabel(agent: Agent): string {
+  if (isBlocked(agent)) return "Blocked";
+  if (isWorking(agent)) return "Working";
+  if (agent.presence === "idle") return "Available";
+  return agent.presence === "online" ? "Active" : "Offline";
 }
 
 function isWorking(agent: Agent): boolean {
@@ -293,6 +327,7 @@ class CommonsVillageScene extends Phaser.Scene {
           actor.blocked ? 0.7 + Math.max(0, wave) * 0.3 : 0.72 + Math.max(0, wave) * 0.28,
         );
       }
+      this.positionAgentProfile(actor);
       this.updateBubble(actor, now);
     });
     this.updateForegroundOcclusion();
@@ -688,6 +723,7 @@ class CommonsVillageScene extends Phaser.Scene {
 
     const uiNode = document.createElement("div");
     uiNode.className = "village-agent-ui";
+    uiNode.dataset.agentId = agent.agent_id;
 
     let statusElement: HTMLSpanElement | null = null;
     if (isBlocked(agent)) {
@@ -715,9 +751,20 @@ class CommonsVillageScene extends Phaser.Scene {
     const bubble = config.message
       ? this.createSpeechBubble(messageLabel(config.message), config.bubbleShift, bubbleRendersBelow(initial.y, uiScale) ? bubbleBelowY : bubbleAboveY, uiScale)
       : null;
+    const profileWidth = clamp(220 * uiScale, 184, 244);
+    const profile = this.createAgentProfile(agent, profileWidth, uiScale);
+    const hoverTarget = document.createElement("button");
+    hoverTarget.type = "button";
+    hoverTarget.className = "village-agent-ui__hitbox";
+    hoverTarget.setAttribute("aria-label", `Preview ${agentName(agent)}`);
+    hoverTarget.setAttribute("aria-describedby", profile.id);
+    hoverTarget.style.left = `${-32 * spriteScale}px`;
+    hoverTarget.style.top = `${-80 * spriteScale}px`;
+    hoverTarget.style.width = `${64 * spriteScale}px`;
+    hoverTarget.style.height = `${86 * spriteScale}px`;
 
     if (statusElement) uiNode.append(statusElement);
-    uiNode.append(namePlate);
+    uiNode.append(namePlate, profile, hoverTarget);
     if (bubble) uiNode.append(bubble);
 
     const container = this.add.container(initial.x, initial.y, [shadow, dust, sprite, sweat])
@@ -725,12 +772,6 @@ class CommonsVillageScene extends Phaser.Scene {
     const uiElement = this.add.dom(initial.x, initial.y, uiNode)
       .setOrigin(0, 0)
       .setDepth(ACTOR_UI_DEPTH_BASE + Math.round(initial.y));
-    container.setInteractive(
-      new Phaser.Geom.Rectangle(-32 * spriteScale, -80 * spriteScale, 64 * spriteScale, 86 * spriteScale),
-      Phaser.Geom.Rectangle.Contains,
-    );
-    if (container.input) container.input.cursor = "pointer";
-
     const actor: SceneActor = {
       container,
       uiElement,
@@ -741,6 +782,8 @@ class CommonsVillageScene extends Phaser.Scene {
       sweat,
       statusElement,
       bubble,
+      profileElement: profile,
+      profileWidth,
       bubbleStartedAt: config.bubbleStartedAt,
       bubbleAboveY,
       bubbleBelowY,
@@ -755,10 +798,111 @@ class CommonsVillageScene extends Phaser.Scene {
       moving: false,
       movement,
     };
-    container.on("pointerup", config.onSelect);
-    container.on("pointerover", () => { actor.hovered = true; });
-    container.on("pointerout", () => { actor.hovered = false; });
+    const setHovered = (hovered: boolean) => {
+      actor.hovered = hovered;
+      uiNode.classList.toggle("village-agent-ui--hovered", hovered);
+      profile.classList.toggle("village-agent-ui__profile--visible", hovered);
+      profile.setAttribute("aria-hidden", String(!hovered));
+    };
+    hoverTarget.addEventListener("pointerenter", () => {
+      this.input.enabled = false;
+      setHovered(true);
+    });
+    hoverTarget.addEventListener("pointerleave", () => {
+      this.input.enabled = true;
+      setHovered(false);
+    });
+    hoverTarget.addEventListener("focus", () => setHovered(true));
+    hoverTarget.addEventListener("blur", () => setHovered(false));
+    hoverTarget.addEventListener("pointerdown", (event) => {
+      this.input.enabled = false;
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    hoverTarget.addEventListener("pointerup", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    hoverTarget.addEventListener("click", (event) => {
+      event.stopPropagation();
+      config.onSelect();
+    });
+    this.positionAgentProfile(actor);
     return actor;
+  }
+
+  private createAgentProfile(agent: Agent, width: number, uiScale: number): HTMLDivElement {
+    const profile = document.createElement("div");
+    profile.id = `village-agent-profile-${hashString(`${agent.project_id}:${agent.agent_id}`)}`;
+    profile.className = "village-agent-ui__profile";
+    profile.setAttribute("role", "tooltip");
+    profile.setAttribute("aria-hidden", "true");
+    profile.style.width = `${width}px`;
+    profile.style.setProperty("--profile-font-size", `${clamp(10.5 * uiScale, 9, 12)}px`);
+
+    const header = document.createElement("div");
+    header.className = "village-agent-ui__profile-header";
+    const identity = document.createElement("div");
+    const handle = document.createElement("strong");
+    handle.textContent = agentName(agent);
+    handle.title = agentName(agent);
+    const state = document.createElement("span");
+    state.className = `village-agent-ui__profile-state village-agent-ui__profile-state--${agentStateLabel(agent).toLowerCase()}`;
+    state.textContent = agentStateLabel(agent);
+    identity.append(handle, state);
+    const contact = document.createElement("span");
+    contact.className = "village-agent-ui__profile-contact";
+    contact.textContent = agent.contact_code || "No code";
+    header.append(identity, contact);
+
+    const details = document.createElement("dl");
+    details.className = "village-agent-ui__profile-details";
+    const addDetail = (label: string, value: string) => {
+      const row = document.createElement("div");
+      const term = document.createElement("dt");
+      const description = document.createElement("dd");
+      term.textContent = label;
+      description.textContent = value;
+      description.title = value;
+      row.append(term, description);
+      details.append(row);
+    };
+    addDetail("Owner", agent.user_name || "Unattributed");
+    addDetail("Device", deviceLabel(agent.host));
+    addDetail("Runtime", runtimeLabel(agent.runtime));
+    addDetail("Workspace", workspaceLabel(agent.workspace));
+    addDetail("Last seen", activityLabel(agent.last_seen_seconds));
+
+    const work = document.createElement("div");
+    work.className = "village-agent-ui__profile-work";
+    const workLabel = document.createElement("span");
+    workLabel.textContent = "Current work";
+    const workTitle = document.createElement("strong");
+    workTitle.textContent = agent.current_task?.title || (isWorking(agent) ? "Busy, no task reported" : "Available for work");
+    workTitle.title = workTitle.textContent;
+    work.append(workLabel, workTitle);
+    profile.append(header, details, work);
+    return profile;
+  }
+
+  private positionAgentProfile(actor: SceneActor): void {
+    const profile = actor.profileElement;
+    const below = actor.container.y < this.scale.height * 0.52;
+    const edge = actor.profileWidth / 2 + 14;
+    const alignment = actor.container.x < edge
+      ? "left"
+      : actor.container.x > this.scale.width - edge
+        ? "right"
+        : "center";
+    profile.classList.toggle("village-agent-ui__profile--below", below);
+    profile.classList.toggle("village-agent-ui__profile--left", alignment === "left");
+    profile.classList.toggle("village-agent-ui__profile--right", alignment === "right");
+    profile.style.left = alignment === "left"
+      ? `${-24 * actor.spriteScale}px`
+      : alignment === "right"
+        ? `${24 * actor.spriteScale}px`
+        : "0";
+    profile.style.top = `${below ? 76 * actor.spriteScale : -86 * actor.spriteScale}px`;
   }
 
   private createSpeechBubble(copy: string, shift: number, baseY: number, uiScale: number): HTMLDivElement {

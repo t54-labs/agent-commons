@@ -67,6 +67,7 @@ export interface Agent {
   user_name: string | null;
   user_slug: string | null;
   runtime: string;
+  host: string | null;
   workspace: string | null;
   task_id: string | null;
   status: string;

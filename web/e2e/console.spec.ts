@@ -247,6 +247,42 @@ test("Workspace overview renders a live interactive Phaser Agent village", async
   await expect(page.getByRole("heading", { name: "Commons Team" })).toBeVisible();
 });
 
+test("Agent hover profiles expose owner and registration device without opening the drawer", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "Desktop covers the pointer hover profile");
+  await signIn(page);
+
+  const village = page.locator(".agent-village");
+  await expect(village).toHaveAttribute("data-render-state", "ready", { timeout: 12_000 });
+  const actor = village.locator('.village-agent-ui[data-agent-id="agent_codex_console"]');
+  const hoverTarget = actor.getByRole("button", { name: "Preview @sergio-codex-console" });
+  const profile = actor.locator(".village-agent-ui__profile");
+
+  await hoverTarget.hover();
+  await expect(profile).toHaveAttribute("aria-hidden", "false");
+  await expect(profile).toContainText("@sergio-codex-console");
+  await expect(profile).toContainText("Sergio");
+  await expect(profile).toContainText("sergio-mac-studio");
+  await expect(profile).toContainText("Codex");
+  await expect(profile).toContainText("commons");
+  await expect(page.locator(".agent-drawer")).toHaveCount(0);
+
+  const stageBounds = await village.locator(".agent-village__stage").boundingBox();
+  const profileBounds = await profile.boundingBox();
+  expect(stageBounds).not.toBeNull();
+  expect(profileBounds).not.toBeNull();
+  expect(profileBounds!.x).toBeGreaterThanOrEqual(stageBounds!.x);
+  expect(profileBounds!.x + profileBounds!.width).toBeLessThanOrEqual(stageBounds!.x + stageBounds!.width);
+  expect(profileBounds!.y).toBeGreaterThanOrEqual(stageBounds!.y);
+  expect(profileBounds!.y + profileBounds!.height).toBeLessThanOrEqual(stageBounds!.y + stageBounds!.height);
+  await page.screenshot({ path: testInfo.outputPath("agent-hover-profile.png") });
+
+  await page.mouse.move(stageBounds!.x + stageBounds!.width - 2, stageBounds!.y + stageBounds!.height - 2);
+  await expect(profile).toHaveAttribute("aria-hidden", "true");
+
+  await hoverTarget.click();
+  await expect(page.locator(".agent-drawer").getByRole("heading", { name: "@sergio-codex-console" })).toBeVisible();
+});
+
 test("Village fullscreen control fills the browser viewport and restores cleanly", async ({ page }, testInfo) => {
   await signIn(page);
 
