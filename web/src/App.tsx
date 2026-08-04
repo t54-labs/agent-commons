@@ -579,7 +579,7 @@ function DirectoryProjectRow({ project, onProject }: { project: DirectoryProject
         </span>
       </td>
       <td className="directory-cell--count"><strong>{project.active_agent_count}</strong><span> / {project.agent_count}</span><small>active / registered</small></td>
-      <td className="directory-cell--count"><strong>{project.active_task_count}</strong><span> active</span><small>{project.blocked_task_count ? `${project.blocked_task_count} blocked` : "no blockers"}</small></td>
+      <td className="directory-cell--count"><strong>{project.active_task_count}</strong><span> / {project.task_count}</span><small>{project.blocked_task_count ? `${project.blocked_task_count} blocked` : "active / total"}</small></td>
       <td className="directory-cell--seen">
         <span className={`presence-dot presence-dot--${project.active_agent_count ? "online" : "offline"}`} />
         {formatRelative(project.last_activity_at)}
@@ -903,6 +903,27 @@ function calendarDayTitle(label: string, day: ActivityCalendarDay | undefined): 
   return `${label}: ${day.total} ${day.total === 1 ? "event" : "events"} — ${parts.join(", ")}`;
 }
 
+function utcCalendarDate(value: string): Date {
+  return new Date(`${value}T12:00:00Z`);
+}
+
+function fallbackUtcCalendar(todayKey: string): ActivityCalendarDay[] {
+  const today = utcCalendarDate(todayKey);
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today);
+    date.setUTCDate(today.getUTCDate() - 6 + index);
+    return {
+      date: date.toISOString().slice(0, 10),
+      total: 0,
+      tasks: 0,
+      messages: 0,
+      leases: 0,
+      agents: 0,
+      other: 0,
+    };
+  });
+}
+
 function RailHeader({
   live,
   calendar,
@@ -914,35 +935,35 @@ function RailHeader({
   selectedDay?: string | null;
   onSelectDay?: (date: string) => void;
 }) {
-  const today = new Date();
-  const byDate = new Map((calendar || []).map((day) => [day.date, day]));
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const today = utcCalendarDate(todayKey);
+  const days = calendar?.length ? calendar.slice(-7) : fallbackUtcCalendar(todayKey);
+  const monthDay = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" });
+  const weekday = new Intl.DateTimeFormat("en", { weekday: "long", timeZone: "UTC" });
   return (
     <>
       <div className="activity-rail__header">
-        <div><strong>{new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(today)}</strong><span>{new Intl.DateTimeFormat("en", { weekday: "long" }).format(today)}</span></div>
+        <div><strong>{monthDay.format(today)}</strong><span>{weekday.format(today)} · UTC</span></div>
         <span className={`live-state ${live ? "live-state--on" : ""}`}><Radio size={14} />{live ? "Live" : "Reconnecting"}</span>
       </div>
       <div className="activity-calendar" aria-label="Coordination activity over the last seven days" role="group">
-        {Array.from({ length: 7 }, (_, index) => {
-          const date = new Date(today);
-          date.setDate(today.getDate() - 6 + index);
-          const key = date.toISOString().slice(0, 10);
-          const day = byDate.get(key);
-          const label = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(date);
-          const classes = [index === 6 ? "selected" : "", selectedDay === key ? "viewing" : ""].filter(Boolean).join(" ");
+        {days.map((day) => {
+          const date = utcCalendarDate(day.date);
+          const label = monthDay.format(date);
+          const classes = [day.date === todayKey ? "selected" : "", selectedDay === day.date ? "viewing" : ""].filter(Boolean).join(" ");
           return (
             <button
               className={classes || undefined}
               type="button"
-              key={key}
+              key={day.date}
               title={calendarDayTitle(label, day)}
-              aria-pressed={selectedDay === key}
+              aria-pressed={selectedDay === day.date}
               aria-label={`Show activity for ${label}`}
-              onClick={onSelectDay ? () => onSelectDay(key) : undefined}
+              onClick={onSelectDay ? () => onSelectDay(day.date) : undefined}
               disabled={!onSelectDay}
             >
-              <small>{new Intl.DateTimeFormat("en", { weekday: "narrow" }).format(date)}</small>
-              {date.getDate()}
+              <small>{new Intl.DateTimeFormat("en", { weekday: "narrow", timeZone: "UTC" }).format(date)}</small>
+              {date.getUTCDate()}
               <i className={`calendar-heat calendar-heat--${calendarHeatLevel(day?.total || 0)}`} aria-hidden="true" />
             </button>
           );
@@ -952,7 +973,7 @@ function RailHeader({
   );
 }
 
-const DAY_GROUPS: Array<{ key: string; label: string; icon: LucideIcon; match: (type: string) => boolean }> = [
+const DAY_GROUPS: Array<{ key: Exclude<keyof DayActivity["totals"], "total">; label: string; icon: LucideIcon; match: (type: string) => boolean }> = [
   { key: "tasks", label: "Tasks", icon: CircleDot, match: (type) => type.startsWith("task") },
   { key: "messages", label: "Messages", icon: Send, match: (type) => type.startsWith("message") },
   { key: "leases", label: "Resources", icon: KeyRound, match: (type) => type.startsWith("lease") || type.startsWith("deploy") || type.startsWith("operation") },
@@ -971,6 +992,7 @@ function DaySummaryRail({
   onSelectDay,
   onClose,
   onEvent,
+  onLoadMore,
 }: {
   date: string;
   detail: DayActivity | null;
@@ -982,8 +1004,9 @@ function DaySummaryRail({
   onSelectDay: (date: string) => void;
   onClose: () => void;
   onEvent: (event: DayActivityEvent) => void;
+  onLoadMore: () => void;
 }) {
-  const label = new Intl.DateTimeFormat("en", { weekday: "long", month: "short", day: "numeric" }).format(new Date(`${date}T12:00:00Z`));
+  const label = new Intl.DateTimeFormat("en", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" }).format(utcCalendarDate(date));
   const groups = DAY_GROUPS.map((group) => ({ ...group, events: [] as DayActivityEvent[] }));
   (detail?.events || []).forEach((event) => {
     const group = groups.find((candidate) => candidate.match(event.event_type));
@@ -1006,7 +1029,7 @@ function DaySummaryRail({
             const GroupIcon = group.icon;
             return (
               <section className="day-summary__group" key={group.key} aria-label={`${group.label} events`}>
-                <div className="day-summary__group-heading"><GroupIcon size={14} /><span>{group.label}</span><small>{group.events.length}</small></div>
+                <div className="day-summary__group-heading"><GroupIcon size={14} /><span>{group.label}</span><small>{detail.totals[group.key]}</small></div>
                 {group.events.map((event) => (
                   <button className={`day-summary__event day-summary__event--${eventTone(event.event_type)}`} type="button" key={event.event_id} onClick={() => onEvent(event)}>
                     <span className="day-summary__body">
@@ -1020,6 +1043,12 @@ function DaySummaryRail({
               </section>
             );
           })}
+          {detail.page.next_cursor && (
+            <div className="day-summary__window">
+              <span>Showing {detail.events.length} of {detail.totals.total} events</span>
+              <button type="button" onClick={onLoadMore} disabled={loading}>{loading ? "Loading..." : "Load older"}</button>
+            </div>
+          )}
         </div>
       )}
     </aside>
@@ -1204,6 +1233,7 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
   const projectRequestId = useRef(0);
   const viewRequestId = useRef(0);
   const agentRequestId = useRef(0);
+  const directoryRequestId = useRef(0);
   const selectedProjectId = useRef("");
   const workspaceViewRef = useRef<WorkspaceView>("overview");
   const selectedAgentRef = useRef<Agent | null>(null);
@@ -1249,32 +1279,38 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
   }, [onUnauthorized]);
 
   const refreshDirectory = useCallback(async () => {
+    const requestId = ++directoryRequestId.current;
     try {
       const next = await getDirectory();
+      if (requestId !== directoryRequestId.current) return;
       setDirectory(next);
       setDirectoryError("");
     } catch (caught) {
+      if (requestId !== directoryRequestId.current) return;
       if (caught instanceof ApiError && caught.status === 401) {
         onUnauthorized();
         return;
       }
       setDirectoryError(caught instanceof Error ? caught.message : "Unable to load the workspace directory.");
     } finally {
-      setDirectoryLoading(false);
+      if (requestId === directoryRequestId.current) setDirectoryLoading(false);
     }
   }, [onUnauthorized]);
 
-  const openDay = useCallback(async (date: string) => {
+  const openDay = useCallback(async (date: string, before?: string | null) => {
     const requestId = ++dayRequestId.current;
+    const append = Boolean(before);
     selectedDayRef.current = date;
     setSelectedDay(date);
-    setDayDetail(null);
+    if (!append) setDayDetail(null);
     setDayError("");
     setDayLoading(true);
     try {
-      const next = await getDayActivity(date, selectedProjectId.current || undefined);
+      const next = await getDayActivity(date, selectedProjectId.current || undefined, before);
       if (requestId !== dayRequestId.current) return;
-      setDayDetail(next);
+      setDayDetail((current) => append && current?.date === date
+        ? { ...next, events: [...current.events, ...next.events] }
+        : next);
     } catch (caught) {
       if (requestId !== dayRequestId.current) return;
       if (caught instanceof ApiError && caught.status === 401) {
@@ -1460,6 +1496,7 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
   }
 
   function openWorkspace(filter: WorkspaceFilter = "all") {
+    directoryRequestId.current += 1;
     selectedProjectId.current = "";
     projectRequestId.current += 1;
     viewRequestId.current += 1;
@@ -1496,6 +1533,7 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
   }
 
   function openProject(id: string, nextView: ConsoleView = "overview") {
+    directoryRequestId.current += 1;
     selectedProjectId.current = id;
     workspaceViewRef.current = "overview";
     setWorkspaceView("overview");
@@ -1547,6 +1585,7 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
   }
 
   function openWorkspaceBroadcast(message: WorkspaceBroadcast) {
+    directoryRequestId.current += 1;
     selectedProjectId.current = message.project_id;
     workspaceViewRef.current = "overview";
     setWorkspaceView("overview");
@@ -1705,7 +1744,14 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
               <Search size={16} aria-hidden="true" />
               <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={projectId ? `Search ${currentTitle.toLowerCase()}` : workspaceView === "directory" ? "Search directory" : "Search projects"} aria-label={projectId ? `Search ${currentTitle.toLowerCase()}` : workspaceView === "directory" ? "Search directory" : "Search projects"} />
             </div>
-            <button className="icon-button" type="button" onClick={() => { void refreshOverview(); void refreshVillage(); if (projectId) void refreshProject(projectId, !activeDetail); if (projectId && view !== "overview") setViewRefreshVersion((current) => current + 1); }} title="Refresh data" aria-label="Refresh data"><RefreshCw size={17} /></button>
+            <button className="icon-button" type="button" onClick={() => {
+              void refreshOverview();
+              void refreshVillage();
+              if (workspaceViewRef.current === "directory" && !selectedProjectId.current) void refreshDirectory();
+              if (selectedDayRef.current) void openDay(selectedDayRef.current);
+              if (projectId) void refreshProject(projectId, !activeDetail);
+              if (projectId && view !== "overview") setViewRefreshVersion((current) => current + 1);
+            }} title="Refresh data" aria-label="Refresh data"><RefreshCw size={17} /></button>
           </header>
 
           <div className="workspace-content">
@@ -1747,6 +1793,9 @@ function Dashboard({ onUnauthorized }: { onUnauthorized: () => void }) {
             showProject={!projectId}
             onSelectDay={toggleDay}
             onClose={closeDay}
+            onLoadMore={() => {
+              if (dayDetail?.page.next_cursor) void openDay(selectedDay, dayDetail.page.next_cursor);
+            }}
             onEvent={(event) => {
               if (projectId) handleActivity(event);
               else if (event.project_id) openProject(event.project_id);

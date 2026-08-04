@@ -2791,6 +2791,31 @@ img {
 
 .day-summary { display: grid; gap: 16px; }
 
+.day-summary__window {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 10px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  font-size: 8.5px;
+}
+
+.day-summary__window button {
+  min-height: 28px;
+  padding: 0 9px;
+  color: var(--teal);
+  background: var(--aqua-soft);
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  font-size: 8.5px;
+  font-weight: 750;
+}
+
+.day-summary__window button:hover:not(:disabled) { border-color: var(--aqua); }
+.day-summary__window button:disabled { opacity: 0.55; cursor: wait; }
+
 .day-summary__group { display: grid; gap: 6px; }
 
 .day-summary__group-heading {

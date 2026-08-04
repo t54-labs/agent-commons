@@ -188,6 +188,12 @@ CREATE TABLE IF NOT EXISTS audit_events (
 CREATE INDEX IF NOT EXISTS idx_audit_project_event
   ON audit_events(project_id, event_id DESC);
 
+CREATE INDEX IF NOT EXISTS idx_audit_created_at
+  ON audit_events(created_at, event_id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_audit_project_created_at
+  ON audit_events(project_id, created_at, event_id DESC);
+
 CREATE TABLE IF NOT EXISTS tasks (
   task_id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,
@@ -2325,6 +2331,41 @@ def console_activity(
 ACTIVITY_CALENDAR_DAYS = 7
 
 
+def activity_category(event_type: str) -> str:
+    if event_type.startswith("task"):
+        return "tasks"
+    if event_type.startswith("message"):
+        return "messages"
+    if event_type.startswith(("lease", "deploy", "operation")):
+        return "leases"
+    if event_type.startswith("agent"):
+        return "agents"
+    return "other"
+
+
+def utc_day_bounds(value: str) -> tuple[str, str]:
+    normalized = str(value or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", normalized):
+        raise RelayError(
+            "invalid calendar date",
+            code="invalid_calendar_date",
+            remediation="Pass date as YYYY-MM-DD.",
+        )
+    try:
+        parsed = datetime.strptime(normalized, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError as exc:
+        raise RelayError(
+            "invalid calendar date",
+            code="invalid_calendar_date",
+            remediation="Pass date as YYYY-MM-DD.",
+        ) from exc
+    following = parsed + timedelta(days=1)
+    return (
+        parsed.isoformat(timespec="seconds").replace("+00:00", "Z"),
+        following.isoformat(timespec="seconds").replace("+00:00", "Z"),
+    )
+
+
 def console_activity_calendar(
     conn: sqlite3.Connection,
     project_id: str | None = None,
@@ -2333,8 +2374,9 @@ def console_activity_calendar(
     window = max(1, min(int(days), 31))
     today = datetime.now(timezone.utc).date()
     start = today - timedelta(days=window - 1)
-    conditions = ["substr(created_at, 1, 10) >= ?"]
-    params: list[Any] = [start.isoformat()]
+    end = today + timedelta(days=1)
+    conditions = ["created_at >= ?", "created_at < ?"]
+    params: list[Any] = [f"{start.isoformat()}T00:00:00Z", f"{end.isoformat()}T00:00:00Z"]
     if project_id:
         conditions.append("project_id = ?")
         params.append(project_id)
@@ -2352,16 +2394,7 @@ def console_activity_calendar(
         bucket = buckets.setdefault(str(row["day"]), dict(empty))
         event_type = str(row["event_type"])
         count = int(row["count"])
-        if event_type.startswith("task"):
-            bucket["tasks"] += count
-        elif event_type.startswith("message"):
-            bucket["messages"] += count
-        elif event_type.startswith(("lease", "deploy", "operation")):
-            bucket["leases"] += count
-        elif event_type.startswith("agent"):
-            bucket["agents"] += count
-        else:
-            bucket["other"] += count
+        bucket[activity_category(event_type)] += count
     calendar = []
     for offset in range(window):
         day = (start + timedelta(days=offset)).isoformat()
@@ -2375,25 +2408,39 @@ def console_day_activity(
     project_id: str | None = None,
     db: str | None = None,
     limit: int = 200,
+    before_event_id: int | None = None,
 ) -> dict[str, Any]:
     normalized = str(date or "").strip()
-    try:
-        datetime.strptime(normalized, "%Y-%m-%d")
-    except ValueError as exc:
-        raise RelayError(
-            "invalid calendar date",
-            code="invalid_calendar_date",
-            remediation="Pass date as YYYY-MM-DD.",
-        ) from exc
-    conditions = ["substr(audit_events.created_at, 1, 10) = ?"]
-    params: list[Any] = [normalized]
+    start_at, end_at = utc_day_bounds(normalized)
+    conditions = ["audit_events.created_at >= ?", "audit_events.created_at < ?"]
+    params: list[Any] = [start_at, end_at]
     if project_id:
         conditions.append("audit_events.project_id = ?")
         params.append(project_id)
-    params.append(max(1, min(int(limit), 500)))
+    page_conditions = list(conditions)
+    page_params = list(params)
+    if before_event_id is not None:
+        if int(before_event_id) <= 0:
+            raise RelayError("invalid event cursor", code="invalid_cursor")
+        page_conditions.append("audit_events.event_id < ?")
+        page_params.append(int(before_event_id))
+    effective_limit = max(1, min(int(limit), 500))
+    page_params.append(effective_limit + 1)
     totals = {"total": 0, "tasks": 0, "messages": 0, "leases": 0, "agents": 0, "other": 0}
     events = []
     with connect(db) as conn:
+        for row in conn.execute(
+            f"""
+            SELECT event_type, COUNT(*) AS count
+            FROM audit_events
+            WHERE {' AND '.join(conditions)}
+            GROUP BY event_type
+            """,
+            params,
+        ):
+            count = int(row["count"])
+            totals["total"] += count
+            totals[activity_category(str(row["event_type"]))] += count
         rows = conn.execute(
             f"""
             SELECT audit_events.*, agents.handle AS actor_handle, agents.runtime AS actor_runtime,
@@ -2403,29 +2450,32 @@ def console_day_activity(
               ON agents.project_id = audit_events.project_id AND agents.agent_id = audit_events.actor_agent_id
             LEFT JOIN projects
               ON projects.project_id = audit_events.project_id
-            WHERE {' AND '.join(conditions)}
+            WHERE {' AND '.join(page_conditions)}
             ORDER BY audit_events.event_id DESC
             LIMIT ?
             """,
-            params,
+            page_params,
         )
         for row in rows:
             event = row_to_dict(row)
             event["payload"] = parse_audit_payload(event["payload"])
             events.append(event)
-            event_type = str(event["event_type"])
-            totals["total"] += 1
-            if event_type.startswith("task"):
-                totals["tasks"] += 1
-            elif event_type.startswith("message"):
-                totals["messages"] += 1
-            elif event_type.startswith(("lease", "deploy", "operation")):
-                totals["leases"] += 1
-            elif event_type.startswith("agent"):
-                totals["agents"] += 1
-            else:
-                totals["other"] += 1
-    return {"date": normalized, "project_id": project_id, "totals": totals, "events": events}
+    has_more = len(events) > effective_limit
+    events = events[:effective_limit]
+    next_cursor = str(events[-1]["event_id"]) if has_more and events else None
+    return {
+        "date": normalized,
+        "project_id": project_id,
+        "totals": totals,
+        "events": events,
+        "page": {
+            "limit": effective_limit,
+            "returned_count": len(events),
+            "has_more": has_more,
+            "next_cursor": next_cursor,
+            "window_complete": not has_more,
+        },
+    }
 
 
 def console_agent_rows_to_dict(
@@ -2648,6 +2698,7 @@ def console_project_summary(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[
         "online_agent_count": sum(1 for agent in agents if agent["presence"] == "online"),
         "idle_agent_count": sum(1 for agent in agents if agent["presence"] == "idle"),
         "busy_agent_count": sum(1 for agent in agents if agent["status"] == "busy"),
+        "task_count": sum(task_counts.values()),
         "active_task_count": active_task_count,
         "blocked_task_count": task_counts.get("blocked", 0) + task_counts.get("needs_human", 0),
         "active_lease_count": int(
@@ -3289,12 +3340,21 @@ class RelayHandler(BaseHTTPRequestHandler):
                     self._send(200, console_directory(self._db()))
                     return
                 if parsed.path == "/v1/console/day":
+                    before_event_id = int_query(
+                        query,
+                        "before",
+                        0,
+                        minimum=0,
+                        maximum=2**63 - 1,
+                    ) or None
                     self._send(
                         200,
                         console_day_activity(
                             one(query, "date"),
                             one(query, "project_id", "") or None,
                             self._db(),
+                            limit=int_query(query, "limit", 200, minimum=1, maximum=500),
+                            before_event_id=before_event_id,
                         ),
                     )
                     return

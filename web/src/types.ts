@@ -18,6 +18,7 @@ export interface ProjectSummary {
   online_agent_count: number;
   idle_agent_count: number;
   busy_agent_count: number;
+  task_count: number;
   active_task_count: number;
   blocked_task_count: number;
   active_lease_count: number;
@@ -146,6 +147,9 @@ export interface DayActivity {
     other: number;
   };
   events: DayActivityEvent[];
+  page: PageMeta & {
+    window_complete: boolean;
+  };
 }
 
 export interface ActivityCalendarDay {

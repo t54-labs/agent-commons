@@ -65,9 +65,10 @@ export function getDirectory(): Promise<DirectorySnapshot> {
   return request("/v1/console/directory");
 }
 
-export function getDayActivity(date: string, projectId?: string): Promise<DayActivity> {
+export function getDayActivity(date: string, projectId?: string, before?: string | null): Promise<DayActivity> {
   const query = new URLSearchParams({ date });
   if (projectId) query.set("project_id", projectId);
+  if (before) query.set("before", before);
   return request(`/v1/console/day?${query.toString()}`);
 }
 

@@ -480,6 +480,63 @@ class CommonsCoreTests(unittest.TestCase):
 
             with self.assertRaises(relay.RelayError):
                 relay.console_day_activity("not-a-date", db=relay_db)
+            with self.assertRaises(relay.RelayError):
+                relay.console_day_activity("2026-8-04", db=relay_db)
+
+            overflow_day = datetime.now(timezone.utc).date().isoformat()
+            with relay.connect(relay_db) as conn, relay.transaction(conn):
+                conn.executemany(
+                    """
+                    INSERT INTO audit_events(project_id, event_type, actor_agent_id, payload, created_at)
+                    VALUES('overflow', 'message.sent', 'agent_a', '{}', ?)
+                    """,
+                    [(f"{overflow_day}T12:00:00Z",)] * 250,
+                )
+            first_page = relay.console_day_activity(overflow_day, "overflow", relay_db, limit=100)
+            self.assertEqual(first_page["totals"]["total"], 250)
+            self.assertEqual(first_page["totals"]["messages"], 250)
+            self.assertEqual(len(first_page["events"]), 100)
+            self.assertFalse(first_page["page"]["window_complete"])
+            self.assertIsNotNone(first_page["page"]["next_cursor"])
+            second_page = relay.console_day_activity(
+                overflow_day,
+                "overflow",
+                relay_db,
+                limit=100,
+                before_event_id=int(first_page["page"]["next_cursor"]),
+            )
+            third_page = relay.console_day_activity(
+                overflow_day,
+                "overflow",
+                relay_db,
+                limit=100,
+                before_event_id=int(second_page["page"]["next_cursor"]),
+            )
+            event_ids = {
+                event["event_id"]
+                for page in (first_page, second_page, third_page)
+                for event in page["events"]
+            }
+            self.assertEqual(len(event_ids), 250)
+            self.assertTrue(third_page["page"]["window_complete"])
+
+            with relay.connect(relay_db) as conn:
+                workspace_plan = " ".join(
+                    str(row["detail"])
+                    for row in conn.execute(
+                        "EXPLAIN QUERY PLAN SELECT event_type, COUNT(*) FROM audit_events WHERE created_at >= ? AND created_at < ? GROUP BY event_type",
+                        (f"{overflow_day}T00:00:00Z", f"{overflow_day}T23:59:59Z"),
+                    )
+                )
+                project_plan = " ".join(
+                    str(row["detail"])
+                    for row in conn.execute(
+                        "EXPLAIN QUERY PLAN SELECT event_type, COUNT(*) FROM audit_events WHERE project_id = ? AND created_at >= ? AND created_at < ? GROUP BY event_type",
+                        ("overflow", f"{overflow_day}T00:00:00Z", f"{overflow_day}T23:59:59Z"),
+                    )
+                )
+            self.assertIn("idx_audit_created_at", workspace_plan)
+            self.assertIn("idx_audit_project_created_at", project_plan)
 
     def test_console_directory_groups_agents_by_user(self) -> None:
         from commons import relay
@@ -528,6 +585,15 @@ class CommonsCoreTests(unittest.TestCase):
             )
             relay.heartbeat_agent(
                 {"project_id": "payments", "agent_id": "grace_claude", "status": "offline"},
+                relay_db,
+            )
+            relay.create_remote_task(
+                {
+                    "project_id": "checkout",
+                    "title": "Directory task fixture",
+                    "owner_agent_id": "ada_codex",
+                    "status": "in_progress",
+                },
                 relay_db,
             )
             with relay.connect(relay_db) as conn, relay.transaction(conn):
@@ -588,6 +654,7 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertEqual(checkout["user_names"], ["Ada Lovelace"])
             self.assertEqual(checkout["unattributed_agent_count"], 1)
             self.assertEqual(checkout["agent_count"], 3)
+            self.assertEqual(checkout["task_count"], 1)
             payments = next(project for project in directory["projects"] if project["project_id"] == "payments")
             self.assertEqual(payments["user_count"], 2)
             self.assertEqual(payments["user_names"], ["Ada Lovelace", "Grace Hopper"])
