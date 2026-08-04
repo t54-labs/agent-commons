@@ -43,6 +43,125 @@ test("operator starts from a clickable Workspace overview and switches Projects"
   await page.screenshot({ path: testInfo.outputPath("workspace-overview.png"), fullPage: true });
 });
 
+test("Workspace directory switches between People, Agents, and Projects", async ({ page }) => {
+  await signIn(page);
+
+  await page.getByRole("button", { name: "Directory" }).click();
+  await expect(page.getByLabel("Directory summary")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "People", exact: true })).toBeVisible();
+  await expect(page.getByText("Sergio", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("@sergio-*", { exact: true })).toBeVisible();
+
+  const directoryTabs = page.getByRole("group", { name: "Directory view" });
+  await directoryTabs.getByRole("button", { name: "Agents", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Agents", exact: true })).toBeVisible();
+  const consoleAgent = page.locator(".directory-table tbody tr").filter({ hasText: "@sergio-codex-console" });
+  await expect(consoleAgent).toContainText("Sergio");
+  await expect(consoleAgent).toContainText("Commons Team");
+
+  await directoryTabs.getByRole("button", { name: "Projects", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Projects", exact: true })).toBeVisible();
+  const commonsProject = page.locator(".directory-table tbody tr").filter({ hasText: "Commons Team" });
+  const projectCounts = commonsProject.locator(".directory-cell--count");
+  await expect(projectCounts.nth(0)).toContainText("3 / 4");
+  await expect(projectCounts.nth(1)).toContainText("1 blocked");
+  const taskCountText = await projectCounts.nth(1).textContent();
+  const taskCounts = taskCountText?.match(/(\d+)\s*\/\s*(\d+)/);
+  expect(taskCounts).not.toBeNull();
+  expect(Number(taskCounts![1])).toBeLessThanOrEqual(Number(taskCounts![2]));
+
+  await page.getByLabel("Search directory").fill("platform");
+  await expect(page.locator(".directory-table tbody tr")).toHaveCount(1);
+  await expect(page.locator(".directory-table tbody tr")).toContainText("Platform Api");
+});
+
+test.describe("UTC activity calendar", () => {
+  test.use({ timezoneId: "Pacific/Kiritimati" });
+
+  test("keeps Relay dates in UTC and loads a complete day through cursors", async ({ page }) => {
+    const utcDate = new Date().toISOString().slice(0, 10);
+    const utcLabel = new Intl.DateTimeFormat("en", {
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    }).format(new Date(`${utcDate}T12:00:00Z`));
+    const requestedCursors: Array<string | null> = [];
+
+    await page.route("**/v1/console/day?**", async (route) => {
+      const url = new URL(route.request().url());
+      const before = url.searchParams.get("before");
+      requestedCursors.push(before);
+      const older = Boolean(before);
+      const events = older
+        ? [{
+            event_id: 40,
+            project_id: "commons-team",
+            event_type: "message.sent",
+            actor_agent_id: "agent_claude_docs",
+            actor_handle: "sergio-claude-docs",
+            actor_runtime: "claude-code",
+            project_display_name: "Commons Team",
+            payload: { body: "Older documentation status" },
+            created_at: `${utcDate}T08:00:00Z`,
+          }]
+        : [
+            {
+              event_id: 42,
+              project_id: "commons-team",
+              event_type: "message.sent",
+              actor_agent_id: "agent_codex_console",
+              actor_handle: "sergio-codex-console",
+              actor_runtime: "codex",
+              project_display_name: "Commons Team",
+              payload: { body: "Current Console status" },
+              created_at: `${utcDate}T18:00:00Z`,
+            },
+            {
+              event_id: 41,
+              project_id: "platform-api",
+              event_type: "message.sent",
+              actor_agent_id: "agent_codex_platform",
+              actor_handle: "sergio-codex-platform",
+              actor_runtime: "codex",
+              project_display_name: "Platform Api",
+              payload: { body: "Current API status" },
+              created_at: `${utcDate}T12:00:00Z`,
+            },
+          ];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          date: utcDate,
+          project_id: null,
+          totals: { total: 3, tasks: 0, messages: 3, leases: 0, agents: 0, other: 0 },
+          events,
+          page: {
+            limit: 200,
+            returned_count: events.length,
+            has_more: !older,
+            next_cursor: older ? null : "41",
+            window_complete: older,
+          },
+        }),
+      });
+    });
+
+    await signIn(page);
+    await expect(page.getByText(/UTC$/, { exact: false }).first()).toBeVisible();
+    await page.getByRole("button", { name: `Show activity for ${utcLabel}` }).click();
+
+    const dayRail = page.getByLabel(new RegExp(`Coordination activity on .*${utcLabel}`));
+    await expect(dayRail).toBeVisible();
+    await expect(dayRail.getByLabel("Messages events").locator(".day-summary__event")).toHaveCount(2);
+    await expect(dayRail.getByText("Showing 2 of 3 events", { exact: true })).toBeVisible();
+    await dayRail.getByRole("button", { name: "Load older" }).click();
+    await expect(dayRail.getByLabel("Messages events").locator(".day-summary__event")).toHaveCount(3);
+    await expect(dayRail.getByText("Showing 2 of 3 events", { exact: true })).toHaveCount(0);
+    expect(requestedCursors).toEqual([null, "41"]);
+  });
+});
+
 test("Workspace overview renders a live interactive Phaser Agent village", async ({ page }, testInfo) => {
   await signIn(page);
 

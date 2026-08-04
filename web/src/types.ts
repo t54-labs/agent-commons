@@ -18,6 +18,7 @@ export interface ProjectSummary {
   online_agent_count: number;
   idle_agent_count: number;
   busy_agent_count: number;
+  task_count: number;
   active_task_count: number;
   blocked_task_count: number;
   active_lease_count: number;
@@ -130,6 +131,37 @@ export interface ActivityEvent {
   created_at: string;
 }
 
+export interface DayActivityEvent extends ActivityEvent {
+  project_display_name: string | null;
+}
+
+export interface DayActivity {
+  date: string;
+  project_id: string | null;
+  totals: {
+    total: number;
+    tasks: number;
+    messages: number;
+    leases: number;
+    agents: number;
+    other: number;
+  };
+  events: DayActivityEvent[];
+  page: PageMeta & {
+    window_complete: boolean;
+  };
+}
+
+export interface ActivityCalendarDay {
+  date: string;
+  total: number;
+  tasks: number;
+  messages: number;
+  leases: number;
+  agents: number;
+  other: number;
+}
+
 export interface Overview {
   workspace: Workspace;
   projects: ProjectSummary[];
@@ -147,6 +179,7 @@ export interface Overview {
     direct_messages: number;
   };
   recent_broadcasts: WorkspaceBroadcast[];
+  activity_calendar: ActivityCalendarDay[];
   latest_event_id: number;
 }
 
@@ -177,6 +210,7 @@ export interface ProjectOverviewDetail {
   tasks: Task[];
   broadcasts: Message[];
   activity: ActivityEvent[];
+  activity_calendar: ActivityCalendarDay[];
 }
 
 export interface AgentsPage {
@@ -224,3 +258,48 @@ export interface ProjectDetail {
 }
 
 export type ConsoleView = "overview" | "agents" | "tasks" | "broadcasts" | "resources";
+
+export interface DirectoryProject {
+  project_id: string;
+  display_name: string;
+  agent_count: number;
+  active_agent_count: number;
+}
+
+export interface DirectoryUser {
+  user_slug: string | null;
+  user_name: string | null;
+  agent_count: number;
+  active_agent_count: number;
+  online_agent_count: number;
+  project_count: number;
+  projects: DirectoryProject[];
+  runtimes: string[];
+  last_seen_at: string;
+  last_seen_seconds: number;
+}
+
+export interface DirectoryAgent extends Agent {
+  project_display_name: string;
+}
+
+export interface DirectoryProjectSummary extends ProjectSummary {
+  user_count: number;
+  user_names: string[];
+  unattributed_agent_count: number;
+}
+
+export interface DirectorySnapshot {
+  workspace: Workspace;
+  users: DirectoryUser[];
+  agents: DirectoryAgent[];
+  projects: DirectoryProjectSummary[];
+  totals: {
+    projects: number;
+    users: number;
+    registered_agents: number;
+    active_agents: number;
+    unattributed_agents: number;
+  };
+  generated_at: string;
+}

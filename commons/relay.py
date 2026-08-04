@@ -188,6 +188,12 @@ CREATE TABLE IF NOT EXISTS audit_events (
 CREATE INDEX IF NOT EXISTS idx_audit_project_event
   ON audit_events(project_id, event_id DESC);
 
+CREATE INDEX IF NOT EXISTS idx_audit_created_at
+  ON audit_events(created_at, event_id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_audit_project_created_at
+  ON audit_events(project_id, created_at, event_id DESC);
+
 CREATE TABLE IF NOT EXISTS tasks (
   task_id TEXT PRIMARY KEY,
   project_id TEXT NOT NULL,
@@ -2322,6 +2328,156 @@ def console_activity(
     return events
 
 
+ACTIVITY_CALENDAR_DAYS = 7
+
+
+def activity_category(event_type: str) -> str:
+    if event_type.startswith("task"):
+        return "tasks"
+    if event_type.startswith("message"):
+        return "messages"
+    if event_type.startswith(("lease", "deploy", "operation")):
+        return "leases"
+    if event_type.startswith("agent"):
+        return "agents"
+    return "other"
+
+
+def utc_day_bounds(value: str) -> tuple[str, str]:
+    normalized = str(value or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", normalized):
+        raise RelayError(
+            "invalid calendar date",
+            code="invalid_calendar_date",
+            remediation="Pass date as YYYY-MM-DD.",
+        )
+    try:
+        parsed = datetime.strptime(normalized, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError as exc:
+        raise RelayError(
+            "invalid calendar date",
+            code="invalid_calendar_date",
+            remediation="Pass date as YYYY-MM-DD.",
+        ) from exc
+    following = parsed + timedelta(days=1)
+    return (
+        parsed.isoformat(timespec="seconds").replace("+00:00", "Z"),
+        following.isoformat(timespec="seconds").replace("+00:00", "Z"),
+    )
+
+
+def console_activity_calendar(
+    conn: sqlite3.Connection,
+    project_id: str | None = None,
+    days: int = ACTIVITY_CALENDAR_DAYS,
+) -> list[dict[str, Any]]:
+    window = max(1, min(int(days), 31))
+    today = datetime.now(timezone.utc).date()
+    start = today - timedelta(days=window - 1)
+    end = today + timedelta(days=1)
+    conditions = ["created_at >= ?", "created_at < ?"]
+    params: list[Any] = [f"{start.isoformat()}T00:00:00Z", f"{end.isoformat()}T00:00:00Z"]
+    if project_id:
+        conditions.append("project_id = ?")
+        params.append(project_id)
+    empty = {"tasks": 0, "messages": 0, "leases": 0, "agents": 0, "other": 0}
+    buckets: dict[str, dict[str, int]] = {}
+    for row in conn.execute(
+        f"""
+        SELECT substr(created_at, 1, 10) AS day, event_type, COUNT(*) AS count
+        FROM audit_events
+        WHERE {' AND '.join(conditions)}
+        GROUP BY day, event_type
+        """,
+        params,
+    ):
+        bucket = buckets.setdefault(str(row["day"]), dict(empty))
+        event_type = str(row["event_type"])
+        count = int(row["count"])
+        bucket[activity_category(event_type)] += count
+    calendar = []
+    for offset in range(window):
+        day = (start + timedelta(days=offset)).isoformat()
+        bucket = buckets.get(day, empty)
+        calendar.append({"date": day, "total": sum(bucket.values()), **bucket})
+    return calendar
+
+
+def console_day_activity(
+    date: str,
+    project_id: str | None = None,
+    db: str | None = None,
+    limit: int = 200,
+    before_event_id: int | None = None,
+) -> dict[str, Any]:
+    normalized = str(date or "").strip()
+    start_at, end_at = utc_day_bounds(normalized)
+    conditions = ["audit_events.created_at >= ?", "audit_events.created_at < ?"]
+    params: list[Any] = [start_at, end_at]
+    if project_id:
+        conditions.append("audit_events.project_id = ?")
+        params.append(project_id)
+    page_conditions = list(conditions)
+    page_params = list(params)
+    if before_event_id is not None:
+        if int(before_event_id) <= 0:
+            raise RelayError("invalid event cursor", code="invalid_cursor")
+        page_conditions.append("audit_events.event_id < ?")
+        page_params.append(int(before_event_id))
+    effective_limit = max(1, min(int(limit), 500))
+    page_params.append(effective_limit + 1)
+    totals = {"total": 0, "tasks": 0, "messages": 0, "leases": 0, "agents": 0, "other": 0}
+    events = []
+    with connect(db) as conn:
+        for row in conn.execute(
+            f"""
+            SELECT event_type, COUNT(*) AS count
+            FROM audit_events
+            WHERE {' AND '.join(conditions)}
+            GROUP BY event_type
+            """,
+            params,
+        ):
+            count = int(row["count"])
+            totals["total"] += count
+            totals[activity_category(str(row["event_type"]))] += count
+        rows = conn.execute(
+            f"""
+            SELECT audit_events.*, agents.handle AS actor_handle, agents.runtime AS actor_runtime,
+                   projects.display_name AS project_display_name
+            FROM audit_events
+            LEFT JOIN agents
+              ON agents.project_id = audit_events.project_id AND agents.agent_id = audit_events.actor_agent_id
+            LEFT JOIN projects
+              ON projects.project_id = audit_events.project_id
+            WHERE {' AND '.join(page_conditions)}
+            ORDER BY audit_events.event_id DESC
+            LIMIT ?
+            """,
+            page_params,
+        )
+        for row in rows:
+            event = row_to_dict(row)
+            event["payload"] = parse_audit_payload(event["payload"])
+            events.append(event)
+    has_more = len(events) > effective_limit
+    events = events[:effective_limit]
+    next_cursor = str(events[-1]["event_id"]) if has_more and events else None
+    return {
+        "date": normalized,
+        "project_id": project_id,
+        "totals": totals,
+        "events": events,
+        "page": {
+            "limit": effective_limit,
+            "returned_count": len(events),
+            "has_more": has_more,
+            "next_cursor": next_cursor,
+            "window_complete": not has_more,
+        },
+    }
+
+
 def console_agent_rows_to_dict(
     conn: sqlite3.Connection,
     project_id: str,
@@ -2542,6 +2698,7 @@ def console_project_summary(conn: sqlite3.Connection, row: sqlite3.Row) -> dict[
         "online_agent_count": sum(1 for agent in agents if agent["presence"] == "online"),
         "idle_agent_count": sum(1 for agent in agents if agent["presence"] == "idle"),
         "busy_agent_count": sum(1 for agent in agents if agent["status"] == "busy"),
+        "task_count": sum(task_counts.values()),
         "active_task_count": active_task_count,
         "blocked_task_count": task_counts.get("blocked", 0) + task_counts.get("needs_human", 0),
         "active_lease_count": int(
@@ -2584,6 +2741,7 @@ def console_project_overview(conn: sqlite3.Connection, project: sqlite3.Row) -> 
         "tasks": task_page["items"],
         "broadcasts": broadcast_page["items"],
         "activity": console_activity(conn, project_id, limit=30),
+        "activity_calendar": console_activity_calendar(conn, project_id),
     }
 
 
@@ -2647,6 +2805,7 @@ def console_overview(db: str | None = None) -> dict[str, Any]:
                 "direct_messages": sum(project["direct_message_count"] for project in projects),
             },
             "recent_broadcasts": console_recent_broadcasts(conn),
+            "activity_calendar": console_activity_calendar(conn),
             "latest_event_id": latest_event_id,
         }
 
@@ -2682,6 +2841,149 @@ def console_village(db: str | None = None) -> dict[str, Any]:
             },
             "projects": projects,
             "agent_limit_per_project": CONSOLE_VILLAGE_AGENT_LIMIT,
+            "generated_at": utc_now(),
+        }
+
+
+def console_directory(db: str | None = None) -> dict[str, Any]:
+    with connect(db) as conn:
+        project_summaries: dict[str, dict[str, Any]] = {}
+        for row in conn.execute("SELECT * FROM projects ORDER BY last_activity_at DESC"):
+            project_summaries[str(row["project_id"])] = console_project_summary(conn, row)
+        project_names = {
+            project_id: str(summary["display_name"] or project_id)
+            for project_id, summary in project_summaries.items()
+        }
+        active_lease_counts = {
+            (str(row["project_id"]), str(row["holder_agent_id"])): int(row["count"])
+            for row in conn.execute(
+                """
+                SELECT project_id, holder_agent_id, COUNT(*) AS count
+                FROM leases
+                WHERE state = 'active' AND expires_at > ?
+                GROUP BY project_id, holder_agent_id
+                """,
+                (now_ts(),),
+            )
+            if row["holder_agent_id"]
+        }
+        message_counts = {
+            (str(row["project_id"]), str(row["sender_agent_id"])): int(row["count"])
+            for row in conn.execute(
+                """
+                SELECT project_id, sender_agent_id, COUNT(*) AS count
+                FROM messages
+                GROUP BY project_id, sender_agent_id
+                """
+            )
+            if row["sender_agent_id"]
+        }
+        users: dict[str, dict[str, Any]] = {}
+        agents: list[dict[str, Any]] = []
+        project_user_names: dict[str, dict[str, str | None]] = {}
+        total_agents = 0
+        total_active_agents = 0
+        for row in conn.execute("SELECT * FROM agents ORDER BY heartbeat_at DESC"):
+            agent = agent_with_presence(row)
+            agent_project_id = str(row["project_id"])
+            agent["project_display_name"] = project_names.get(agent_project_id, agent_project_id)
+            agent["current_task"] = None
+            agent["active_lease_count"] = active_lease_counts.get((agent_project_id, str(row["agent_id"])), 0)
+            agent["message_count"] = message_counts.get((agent_project_id, str(row["agent_id"])), 0)
+            agents.append(agent)
+            slug_key = str(row["user_slug"] or "")
+            project_user_names.setdefault(agent_project_id, {})[slug_key] = (
+                str(row["user_name"]) if row["user_slug"] else None
+            )
+            total_agents += 1
+            if agent["active"]:
+                total_active_agents += 1
+            entry = users.get(slug_key)
+            if entry is None:
+                entry = users[slug_key] = {
+                    "user_slug": row["user_slug"],
+                    "user_name": row["user_name"],
+                    "agent_count": 0,
+                    "active_agent_count": 0,
+                    "online_agent_count": 0,
+                    "runtimes": [],
+                    "projects": {},
+                    "last_seen_at": agent["last_seen_at"],
+                    "last_seen_seconds": agent["last_seen_seconds"],
+                }
+            entry["agent_count"] += 1
+            if agent["active"]:
+                entry["active_agent_count"] += 1
+            if agent["presence"] == "online":
+                entry["online_agent_count"] += 1
+            runtime = str(row["runtime"])
+            if runtime not in entry["runtimes"]:
+                entry["runtimes"].append(runtime)
+            project_id = str(row["project_id"])
+            project = entry["projects"].get(project_id)
+            if project is None:
+                project = entry["projects"][project_id] = {
+                    "project_id": project_id,
+                    "display_name": project_names.get(project_id, project_id),
+                    "agent_count": 0,
+                    "active_agent_count": 0,
+                }
+            project["agent_count"] += 1
+            if agent["active"]:
+                project["active_agent_count"] += 1
+            if agent["last_seen_seconds"] < entry["last_seen_seconds"]:
+                entry["last_seen_seconds"] = agent["last_seen_seconds"]
+                entry["last_seen_at"] = agent["last_seen_at"]
+        directory_users = []
+        for entry in users.values():
+            projects = sorted(
+                entry["projects"].values(),
+                key=lambda project: (-project["active_agent_count"], -project["agent_count"], project["display_name"]),
+            )
+            entry["projects"] = projects
+            entry["project_count"] = len(projects)
+            entry["runtimes"] = sorted(entry["runtimes"])
+            directory_users.append(entry)
+        directory_users.sort(
+            key=lambda entry: (
+                entry["user_slug"] is None,
+                -entry["active_agent_count"],
+                -entry["agent_count"],
+                str(entry["user_name"] or "").casefold(),
+            )
+        )
+        directory_projects = []
+        for project_id, summary in project_summaries.items():
+            participant_names = project_user_names.get(project_id, {})
+            summary["user_count"] = sum(1 for slug in participant_names if slug)
+            summary["user_names"] = sorted(
+                (name for slug, name in participant_names.items() if slug and name),
+                key=str.casefold,
+            )
+            summary["unattributed_agent_count"] = sum(
+                1
+                for agent in agents
+                if agent["project_id"] == project_id and not agent["user_slug"]
+            )
+            directory_projects.append(summary)
+        return {
+            "workspace": {
+                "id": os.environ.get("COMMONS_WORKSPACE_ID", "default"),
+                "name": os.environ.get("COMMONS_WORKSPACE_NAME", "Commons Team"),
+                "relay": "commons-relay",
+            },
+            "users": directory_users,
+            "agents": agents,
+            "projects": directory_projects,
+            "totals": {
+                "projects": len(project_names),
+                "users": sum(1 for entry in directory_users if entry["user_slug"]),
+                "registered_agents": total_agents,
+                "active_agents": total_active_agents,
+                "unattributed_agents": sum(
+                    entry["agent_count"] for entry in directory_users if not entry["user_slug"]
+                ),
+            },
             "generated_at": utc_now(),
         }
 
@@ -3033,6 +3335,28 @@ class RelayHandler(BaseHTTPRequestHandler):
                     return
                 if parsed.path == "/v1/console/village":
                     self._send(200, console_village(self._db()))
+                    return
+                if parsed.path == "/v1/console/directory":
+                    self._send(200, console_directory(self._db()))
+                    return
+                if parsed.path == "/v1/console/day":
+                    before_event_id = int_query(
+                        query,
+                        "before",
+                        0,
+                        minimum=0,
+                        maximum=2**63 - 1,
+                    ) or None
+                    self._send(
+                        200,
+                        console_day_activity(
+                            one(query, "date"),
+                            one(query, "project_id", "") or None,
+                            self._db(),
+                            limit=int_query(query, "limit", 200, minimum=1, maximum=500),
+                            before_event_id=before_event_id,
+                        ),
+                    )
                     return
                 if parsed.path.startswith("/v1/console/projects/"):
                     self._send(200, self._console_project_response(parsed.path, query))
