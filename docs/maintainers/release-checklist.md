@@ -28,8 +28,8 @@ each completed gate.
 - [ ] The PyPI README is self-contained and does not depend on private repository links.
 - [ ] Relay and Console container targets build.
 - [ ] Fresh Compose stack passes health, unauthenticated denial, Team-token login, Console overview, and Relay API checks.
-- [ ] Real Codex and Claude Code runtime smoke is either passed or explicitly marked `NOT RUN` with reason.
-- [ ] A clean 0.3.0 client-to-0.4.0 upgrade refreshes both global Skills and preserves existing Relay state.
+- [ ] Real Codex, Claude Code, and Cline runtime smoke is either passed or explicitly marked `NOT RUN` with reason.
+- [ ] A clean 0.4.0 client-to-0.5.0 upgrade refreshes all global Skills and preserves existing Relay state.
 - [ ] New Agent registration rejects missing or mismatched human attribution, while existing legacy Agents remain readable.
 
 ## Security and Privacy
@@ -67,7 +67,7 @@ each completed gate.
 - [ ] No historical release workflow rebuilds or republishes the preserved bootstrap assets.
 - [ ] `make public-check` and an independent secret scanner pass on the candidate and both public commits.
 - [ ] Anonymous clone works from a clean machine or container.
-- [ ] `./scripts/install.sh --source .` installs Codex and Claude Skills in an isolated HOME.
+- [ ] `./scripts/install.sh --source .` installs Codex, Claude Code, and Cline Skills in an isolated HOME.
 - [ ] README local links and images render on GitHub.
 - [ ] Five-minute path succeeds without maintainer assistance.
 - [ ] Docker quick start binds to localhost by default.
@@ -78,7 +78,7 @@ each completed gate.
 ## GitHub Repository Settings for a Public Repository Launch
 
 - [ ] Repository description is set.
-- [ ] Topics include Agent coordination, Codex, Claude Code, self-hosting, and distributed systems.
+- [ ] Topics include Agent coordination, Codex, Claude Code, Cline, self-hosting, and distributed systems.
 - [ ] Wiki is disabled so repository docs remain canonical.
 - [ ] Discussions are enabled with `Ideas`, `Q&A`, and `Show and tell` categories once moderation ownership is assigned.
 - [ ] Private vulnerability reporting is enabled before source is pushed or launch traffic is directed to the repository.
@@ -120,10 +120,11 @@ each completed gate.
 6. Approve the protected `pypi` environment.
 7. Verify the OIDC publication, attestations, hashes, metadata, and a clean pinned pipx installation.
 
-For `0.4.0`, upgrade clients and refresh their global Skills before deploying
-the Relay registration enforcement. Verify `commons user show --json` on each
-machine, then deploy and run the remote acceptance suite. The Relay must never
-attempt to mutate a client's local Skill files.
+For `0.5.0`, upgrade clients and refresh all global Skills before relying on
+Cline registration. Verify `commons user show --json`, Cline Skill discovery,
+and explicit runtime attribution on each participating machine, then run the
+remote acceptance suite. The Relay must never attempt to mutate a client's
+local Skill files.
 
 ## Initial Public Repository Launch Order
 

@@ -7,13 +7,13 @@ exists. The exact shipped boundary lives in
 
 ## Current Baseline
 
-Latest release: `agent-commons 0.4.0`.
+Latest published release: `agent-commons 0.4.0`.
 
-Current `main` line: `0.4.0`.
+Current development line: `0.5.0`.
 
 The implemented product already includes:
 
-- PyPI-distributed CLI and global Codex/Claude Code Skill
+- PyPI-distributed CLI and global Codex/Claude Code/Cline Skill
 - explicit `remote`, `local`, and `disabled` workspace enrollment
 - local SQLite state and filesystem Board fallback
 - self-hosted private Relay with SQLite WAL
@@ -43,7 +43,7 @@ The 0.3.x line is designed for one mutually trusted team per Relay.
   approval.
 - Enforcement is strongest when operations use Commons wrappers. A same-user
   process can bypass advisory coordination.
-- Commons cannot wake or resume an idle Codex or Claude Code session.
+- Commons cannot wake or resume an idle Codex, Claude Code, or Cline session.
 - Public hosted Relay service, global discovery, and federation are non-goals
   for the current architecture.
 
@@ -174,7 +174,7 @@ Required gates:
 - backward-compatible CLI and JSON policy
 - tested database and protocol migrations
 - documented upgrade, rollback, backup, and recovery paths
-- cross-runtime acceptance on supported Codex and Claude Code versions
+- cross-runtime acceptance on supported Codex, Claude Code, and Cline versions
 - bounded performance targets for large projects and message histories
 - complete operator and contributor documentation
 - explicit support and deprecation policy

@@ -16,15 +16,15 @@ Commons requires Python 3.11 or newer. Install the command-line tool in an
 isolated environment with `pipx`:
 
 ```bash
-pipx install agent-commons==0.4.0
-commons install-skill --target both --scope user
+pipx install agent-commons==0.5.0
+commons install-skill --target all --scope user
 commons doctor --json
 ```
 
 The distribution name is `agent-commons`; the Python import and CLI command are
-both `commons`. The Skill is installed globally for both Codex and Claude Code.
-Installing the package does not enroll a workspace, contact a Relay, or select
-local coordination mode.
+both `commons`. The Skill is installed globally for Codex, Claude Code, and
+Cline. Installing the package does not enroll a workspace, contact a Relay, or
+select local coordination mode.
 
 Start a fresh Agent session after installation. From then on, normal onboarding
 is conversational:
@@ -74,12 +74,12 @@ release leases, and go offline through the Skill.
 
 ## Upgrade
 
-Upgrade the isolated package, refresh both installed Skills, and start a fresh
+Upgrade the isolated package, refresh all installed Skills, and start a fresh
 Agent session:
 
 ```bash
 pipx upgrade agent-commons
-commons install-skill --target both --scope user
+commons install-skill --target all --scope user
 commons doctor --json
 ```
 

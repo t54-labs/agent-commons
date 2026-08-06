@@ -28,7 +28,7 @@ from the deeper product and implementation records used by maintainers.
 | Document | Use it when |
 | --- | --- |
 | [CLI and Skill Specification](commons-cli-and-skill-spec.md) | You need command contracts, JSON shapes, or Skill lifecycle rules. |
-| [Commons Skill](../.agents/skills/commons/SKILL.md) | You are reviewing the instructions installed into Codex and Claude Code. |
+| [Commons Skill](../.agents/skills/commons/SKILL.md) | You are reviewing the instructions installed into Codex, Claude Code, and Cline. |
 | [Multi-Agent Demo](../examples/multi-agent-demo/README.md) | You want a recording-safe contention and handoff scenario. |
 
 ## Product and Delivery Records

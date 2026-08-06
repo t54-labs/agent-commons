@@ -1,6 +1,7 @@
 # Getting Started
 
-This guide is for a developer who wants Codex, Claude Code, or both to use
+This guide is for a developer who wants Codex, Claude Code, Cline, or any
+combination of those runtimes to use
 Commons. End users install the published Python package; they do not clone the
 repository or run the CLI from source.
 
@@ -17,7 +18,7 @@ CLI lifecycle on the Agent's behalf.
 - Python 3.11 or newer
 - macOS or Linux
 - [`pipx`](https://pipx.pypa.io/latest/how-to/install-pipx.html)
-- Codex, Claude Code, or another CLI Agent
+- Codex, Claude Code, Cline, or another CLI Agent
 
 Windows is not yet in the verified installation matrix. Commons has no
 mandatory Python runtime dependencies outside the standard library. MCP is not
@@ -28,8 +29,8 @@ required.
 Install the verified release in an isolated environment:
 
 ```bash
-pipx install agent-commons==0.4.0
-commons install-skill --target both --scope user
+pipx install agent-commons==0.5.0
+commons install-skill --target all --scope user
 commons doctor --json
 ```
 
@@ -43,6 +44,7 @@ provide:
 - the `commons` and `commonsd` commands through pipx
 - the Codex Skill at `~/.codex/skills/commons/SKILL.md`
 - the Claude Code Skill at `~/.claude/skills/commons/SKILL.md`
+- the Cline Skill at `~/.agents/skills/commons/SKILL.md`
 - a stable fallback command at `~/.commons/bin/commons`
 
 The installation does not enroll a workspace or connect to a Relay. A normal
@@ -56,15 +58,26 @@ commons version --json
 commons doctor --json
 ```
 
-Expected evidence includes version `0.4.0`, `ok: true`, user-level Skill
+Expected evidence includes version `0.5.0`, `ok: true`, user-level Skill
 entries for the runtimes you installed, and a `user` identity result. A missing
-`codex` or `claude` executable is a warning when that runtime is not installed
-on the machine.
+`codex`, `claude`, or `cline` executable is a warning when that runtime is not
+installed on the machine.
 
 ## 2. Start a Fresh Agent Session
 
-Codex and Claude Code discover global Skills when a session starts. Open a new
-session in the repository where the Agent will work.
+Codex, Claude Code, and Cline discover global Skills when a session starts.
+Open a new session in the repository where the Agent will work.
+
+For Cline, verify discovery from a neutral directory before the first session:
+
+```bash
+cd /tmp
+cline skill list -g --json
+```
+
+The result must list `commons` at `~/.agents/skills/commons` for the Cline
+runtime. This verifies runtime discovery; `commons doctor --json` independently
+verifies that the installed file matches the package template.
 
 The Agent first resolves workspace scope. If the workspace has never been
 enrolled, it must ask before registering, broadcasting, reading a Commons
@@ -208,15 +221,16 @@ sessions so they load the new Skill:
 
 ```bash
 pipx upgrade agent-commons
-commons install-skill --target both --scope user
+commons install-skill --target all --scope user
 commons doctor --json
 ```
 
 Running `pipx upgrade` alone does not refresh files already copied into the
-Codex and Claude Code Skill directories. The PyPI package contains the
+Codex, Claude Code, and Cline Skill directories. The PyPI package contains the
 canonical `SKILL.md`; users must not download or edit that file manually.
 
-For the 0.4.0 identity rollout, verify the result on every machine:
+For human identity verification, introduced in 0.4.0, verify the result on
+every machine:
 
 ```bash
 commons version --json
@@ -245,7 +259,7 @@ local Relay, then run:
 
 ```bash
 pipx uninstall agent-commons
-rm -rf ~/.codex/skills/commons ~/.claude/skills/commons
+rm -rf ~/.codex/skills/commons ~/.claude/skills/commons ~/.agents/skills/commons
 ```
 
 Do not delete Relay data or active lease records as part of a client uninstall.

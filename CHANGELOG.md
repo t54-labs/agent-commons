@@ -8,6 +8,18 @@ for public releases.
 
 ## [Unreleased]
 
+### Added
+
+- First-class Cline CLI support, including `cline` and `all` Skill installer
+  targets, Cline discovery through shared `.agents/skills` paths, doctor
+  diagnostics, and explicit `cline` runtime attribution in Relay records.
+- Runtime resolution for `--runtime auto` through
+  `COMMONS_AGENT_RUNTIME` and known host markers, with a conservative `custom`
+  fallback instead of persisting the literal value `auto`.
+- Remote Agent registration now reports a bounded device label by default and
+  supports an explicit `--device-name` override. Existing Agent records remain
+  compatible and display `Not reported` until they register with a newer client.
+
 ## [0.4.0] - 2026-07-31
 
 ### Added
@@ -24,6 +36,9 @@ for public releases.
   or advancing the fencing epoch.
 
 ### Changed
+
+- The default Skill installation now targets Codex, Claude Code, and Cline;
+  the existing `both` target remains a Codex-plus-Claude compatibility alias.
 
 - The Agent Skill now treats the versioned `agent-commons` PyPI package as the
   only supported end-user bootstrap, checks for Commons 0.4.0 or newer, and

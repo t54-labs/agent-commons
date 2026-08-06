@@ -2,7 +2,13 @@
 
 **Research date:** 2026-08-04  
 **Cline source snapshot:** [`6712d43`](https://github.com/cline/cline/tree/6712d43c69f4590204cdff10a93bb7abb83ad05c)  
-**Scope:** Local terminal runtimes. This note evaluates the current Commons package and Skill against Codex CLI, Claude Code CLI, and Cline CLI. It proposes an implementation sequence but does not change product code.
+**Scope:** Local terminal runtimes. This note evaluates the Commons package and Skill against Codex CLI, Claude Code CLI, and Cline CLI.
+
+> **Implementation update, 2026-08-06:** the Commons 0.5 development line
+> implements the Phase 1 Skill integration described here. Validation against
+> Cline CLI 3.0.51 showed that `cline skill list -g --json` discovers the
+> Commons user Skill at `~/.agents/skills/commons`. That observed open-skills
+> path supersedes the earlier recommendation to prefer `~/.cline/skills`.
 
 ## Executive conclusion
 
@@ -12,7 +18,10 @@ The current support level is uneven:
 
 - **Claude Code CLI:** already has working baseline support. Commons installs the Skill to Claude Code's documented personal and project paths.
 - **Codex CLI:** already works, but the user-level installer still writes to the legacy `~/.codex/skills` location. The current documented cross-agent location is `~/.agents/skills`; project installs already use the correct `.agents/skills` path.
-- **Cline CLI:** the Commons CLI can already be called from Cline's shell tool, and project-local Commons Skills may be discovered through shared Agent Skills locations in some Cline builds. Commons does not yet install a canonical Cline user Skill, report Cline in `doctor`, or provide a Cline lifecycle adapter. It is therefore compatible in principle, not first-class supported today.
+- **Cline CLI:** the Commons 0.5 development line installs a canonical Cline
+  Skill, reports Cline in `doctor`, and records the runtime as `cline`. This is
+  first-class Skill-driven support; a deterministic lifecycle plugin remains a
+  separate roadmap item.
 
 Cline has a standalone terminal agent, native `SKILL.md` discovery, always-on rules, shell execution, lifecycle hooks, plugins, and headless execution. A Commons installation can distribute its existing Python CLI through PyPI and let Cline invoke the `commons` executable through built-in shell execution or a small Cline adapter.
 
@@ -30,20 +39,20 @@ The strongest product direction is a Cline plugin that launches the existing Com
 | Capability | Codex CLI | Claude Code CLI | Cline CLI |
 | --- | --- | --- | --- |
 | Run the `commons` executable | Yes | Yes | Yes |
-| Current Commons user Skill install | Legacy-compatible path | Canonical path | Not installed |
-| Current Commons project Skill install | Canonical path | Canonical path | Incidental discovery only; no explicit target |
+| Current Commons user Skill install | Legacy-compatible path | Canonical path | Shared canonical path |
+| Current Commons project Skill install | Canonical path | Canonical path | Shared canonical path |
 | Skill auto-selection | Model-selected, on demand | Model-selected, on demand | Model-selected, on demand |
 | Always-on instructions | `AGENTS.md` | `CLAUDE.md` | Rules or `AGENTS.md` |
 | Deterministic lifecycle surface | Native hooks | Native hooks | Plugin hooks; file hooks exist but have source/documentation drift |
 | Can block risky tool use | `PreToolUse` | `PreToolUse` | Plugin/file pre-tool hook |
 | True passive Relay wake-up | Requires runtime adapter | Requires runtime adapter | Plausible through plugin events and hub, but not yet proven |
-| Commons status today | Supported with path debt | Supported baseline | Feasible, not first-class |
+| Commons status today | Supported with path debt | Supported baseline | Skill-driven support in 0.5 |
 
-## Current Commons implementation audit
+## Commons 0.4 implementation audit
 
 The current package is runtime-neutral at the Relay protocol layer: registration accepts arbitrary runtime strings, so `runtime: "cline"` needs no Relay schema change. The missing work is in installation, runtime identity, diagnostics, and lifecycle integration.
 
-Confirmed gaps in the current source:
+Confirmed gaps in the 0.4 source at the research date:
 
 - `commons install-skill --target` accepts only `codex`, `claude`, or `both`.
 - `commons doctor` checks only `codex` and `claude` executables and Skill locations.
@@ -91,7 +100,10 @@ The current source searches these paths in this order:
 
 The loader processes paths in order and later records replace earlier records with the same normalized skill name ([path resolver](https://github.com/cline/cline/blob/6712d43c69f4590204cdff10a93bb7abb83ad05c/sdk/packages/shared/src/storage/paths.ts#L384-L438), [merge behavior](https://github.com/cline/cline/blob/6712d43c69f4590204cdff10a93bb7abb83ad05c/sdk/packages/core/src/extensions/config/unified-config-file-watcher.ts#L391-L449)). This matches the documented rule that a global skill wins over a project skill with the same name ([Skills documentation](https://docs.cline.bot/customization/skills#where-skills-live)).
 
-For Commons, the canonical user-level target should be `~/.cline/skills/commons/SKILL.md`. A project-specific installation should use `.cline/skills/commons/SKILL.md`.
+For Commons, the validated user-level target is
+`~/.agents/skills/commons/SKILL.md`. A project-specific installation uses
+`.agents/skills/commons/SKILL.md`. These locations are also understood by
+other runtimes and match Cline CLI 3.0.51's `cline skill list` output.
 
 ### Rules
 
@@ -131,7 +143,7 @@ Cline plugins are the stronger extension surface. Official documentation says pl
 
 The following are **source-code findings**, not stable product promises:
 
-- The Skills page lists project `.claude/skills/`, but the current CLI source searches `.agents/skills/` instead and contains no `.claude/skills/` search entry. Commons should install to `.cline/skills/` until Cline resolves this drift.
+- The Skills page and source snapshots have disagreed about legacy runtime-specific paths. Commons uses the shared `.agents/skills/` path that the current `cline skill` command reports, and release tests must capability-check that discovery instead of assuming it remains stable.
 - The MCP page says CLI config is `~/.cline/mcp.json`, while current source resolves `~/.cline/data/settings/cline_mcp_settings.json` (or `CLINE_MCP_SETTINGS_PATH`) and does not merge a project `.cline/mcp.json` in the CLI runtime ([source resolver](https://github.com/cline/cline/blob/6712d43c69f4590204cdff10a93bb7abb83ad05c/sdk/packages/shared/src/storage/paths.ts#L347-L369)). MCP paths should be capability-probed rather than assumed.
 - `--hooks-dir` sets `CLINE_HOOKS_DIR`, but the current hook path resolver does not read that environment variable. Install into `~/.cline/hooks/` or use a plugin instead of relying on this flag.
 - The Rules documentation describes conditional `paths` activation, but the current shared CLI loader retains frontmatter without applying `paths` during system-prompt rule loading. Do not rely on conditional activation for Commons safety controls.
@@ -147,7 +159,7 @@ The following are **source-code findings**, not stable product promises:
 Make the existing lightweight integration accurate across all three runtimes:
 
 - add `cline` and `all` installer targets while preserving `both` as the Codex-plus-Claude compatibility alias;
-- install Cline user Skills at `~/.cline/skills/commons` and project Skills at `.cline/skills/commons`;
+- install Cline user Skills at `~/.agents/skills/commons` and project Skills at `.agents/skills/commons`;
 - migrate Codex user installation toward `~/.agents/skills/commons`, detecting and reporting duplicate legacy copies rather than silently activating both;
 - make the Skill wording runtime-neutral and keep the packaged template byte-identical across installed targets;
 - resolve `--runtime auto` to a supported runtime, with runtime adapters setting `COMMONS_AGENT_RUNTIME` explicitly;
@@ -156,7 +168,7 @@ Make the existing lightweight integration accurate across all three runtimes:
 
 For Cline specifically:
 
-- installs the canonical Skill at `~/.cline/skills/commons/SKILL.md`;
+- installs the canonical Skill at `~/.agents/skills/commons/SKILL.md`;
 - installs a uniquely named always-on rule at `~/.cline/rules/commons-bootstrap.md` that requires Commons preflight before shared side effects;
 - resolves the PyPI-installed `commons` executable once and records a stable executable path for Cline-launched subprocesses;
 - verifies discovery through an isolated Cline invocation and the runtime's configuration UI rather than assuming undocumented config subcommands;
@@ -204,6 +216,6 @@ The Skill-only release can claim "works with" a runtime. The hook/plugin release
 
 ## Final recommendation
 
-Add Cline as a first-class Commons runtime, not as a Claude Code alias. The immediate no-MCP integration is feasible through `~/.cline/skills`, `~/.cline/rules`, shell execution, and a stable Commons executable. Fix Codex's canonical user path and the unresolved `runtime auto` behavior in the same compatibility release so all three runtimes share one honest support contract.
+Add Cline as a first-class Commons runtime, not as a Claude Code alias. The immediate no-MCP integration is feasible through shared `.agents/skills`, Cline rules where explicitly enabled, shell execution, and a stable Commons executable. Fix the unresolved `runtime auto` behavior in the same compatibility release so all three runtimes share one honest support contract.
 
 For a reliable product experience, use native Codex and Claude hooks plus a Cline plugin as thin deterministic adapters, while Skills remain the human-readable workflow contract. Do not claim passive real-time delivery until an external-event/resume spike proves behavior across CLI exit, hub restart, Relay disconnect, and machine sleep/wake.

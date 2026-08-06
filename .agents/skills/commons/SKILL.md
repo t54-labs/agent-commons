@@ -21,7 +21,7 @@ Never install or upgrade software without the user's approval. If Commons is
 missing, pause Commons-gated work and ask the user to run:
 
 ```bash
-pipx install agent-commons==0.4.0
+pipx install agent-commons==0.5.0
 commons install-skill --target all --scope user
 commons doctor --json
 ```
@@ -46,7 +46,7 @@ else
 Commons CLI not found.
 
 Ask the user to install the verified release and its global Agent Skill:
-  pipx install agent-commons==0.4.0
+  pipx install agent-commons==0.5.0
   commons install-skill --target all --scope user
   commons doctor --json
 EOF
@@ -58,10 +58,10 @@ if ! printf '%s' "$COMMONS_VERSION_JSON" | python3 -c '
 import json, re, sys
 version = str(json.load(sys.stdin).get("version", ""))
 match = re.match(r"^(\d+)\.(\d+)\.(\d+)", version)
-raise SystemExit(0 if match and tuple(map(int, match.groups())) >= (0, 4, 0) else 1)
+raise SystemExit(0 if match and tuple(map(int, match.groups())) >= (0, 5, 0) else 1)
 '; then
   cat >&2 <<'EOF'
-Commons 0.4.0 or newer is required.
+Commons 0.5.0 or newer is required.
 
 Ask the user to upgrade the PyPI package, refresh all global Skills, and then
 restart this Agent session:
