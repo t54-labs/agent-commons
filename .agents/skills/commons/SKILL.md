@@ -1,6 +1,6 @@
 ---
 name: commons
-description: Coordinate with other local coding agents through Commons before starting shared work, changing plans, touching shared resources, deploying, migrating databases, using browser profiles, or requesting help from another agent.
+description: Coordinate Codex, Claude Code, Cline, and other coding agents through Commons before starting shared work, changing plans, touching shared resources, deploying, migrating databases, using browser profiles, or requesting help from another agent.
 ---
 
 # Commons Agent Coordination
@@ -14,15 +14,15 @@ Commons is scope-first. A workspace must be explicitly enrolled before an agent 
 ## CLI Resolution
 
 The supported bootstrap is the `agent-commons` package from PyPI. The package
-installs the `commons` command and carries this Skill for both Codex and Claude
-Code. A source checkout is only required for contributors.
+installs the `commons` command and carries this Skill for Codex, Claude Code,
+and Cline. A source checkout is only required for contributors.
 
 Never install or upgrade software without the user's approval. If Commons is
 missing, pause Commons-gated work and ask the user to run:
 
 ```bash
 pipx install agent-commons==0.4.0
-commons install-skill --target both --scope user
+commons install-skill --target all --scope user
 commons doctor --json
 ```
 
@@ -47,7 +47,7 @@ Commons CLI not found.
 
 Ask the user to install the verified release and its global Agent Skill:
   pipx install agent-commons==0.4.0
-  commons install-skill --target both --scope user
+  commons install-skill --target all --scope user
   commons doctor --json
 EOF
   exit 127
@@ -63,10 +63,10 @@ raise SystemExit(0 if match and tuple(map(int, match.groups())) >= (0, 4, 0) els
   cat >&2 <<'EOF'
 Commons 0.4.0 or newer is required.
 
-Ask the user to upgrade the PyPI package, refresh both global Skills, and then
+Ask the user to upgrade the PyPI package, refresh all global Skills, and then
 restart this Agent session:
   pipx upgrade agent-commons
-  commons install-skill --target both --scope user
+  commons install-skill --target all --scope user
   commons doctor --json
 EOF
   exit 2
@@ -80,15 +80,15 @@ two-step user-level upgrade:
 
 ```bash
 pipx upgrade agent-commons
-commons install-skill --target both --scope user
+commons install-skill --target all --scope user
 commons doctor --json
 ```
 
 The PyPI package carries the canonical Skill. Never ask the user to download,
 copy, or edit `SKILL.md` manually. Upgrading the package refreshes the bundled
 Skill template; `install-skill` then copies that exact template into the global
-Codex and Claude Code Skill directories. Ask the user to restart existing Agent
-sessions after the command succeeds.
+Codex, Claude Code, and Cline Skill directories. Ask the user to restart
+existing Agent sessions after the command succeeds.
 
 Do not search the whole filesystem for the CLI, do not run source files such as
 `commons/cli.py` directly, do not invoke `python -m commons.cli` as an
@@ -118,6 +118,20 @@ Scope requirements:
 Recommended scope-first startup:
 
 ```bash
+if [ -z "${COMMONS_AGENT_RUNTIME:-}" ]; then
+  cat >&2 <<'EOF'
+Commons needs this session's runtime label before registration.
+
+Set COMMONS_AGENT_RUNTIME from the Agent host that is executing this Skill:
+- Codex: codex
+- Claude Code: claude-code
+- Cline: cline
+
+Do not infer the runtime from the project name or reuse another Agent's label.
+EOF
+  exit 5
+fi
+
 SCOPE_JSON="$("$COMMONS_BIN" scope resolve --workspace "$PWD" --json)"
 COMMONS_MODE="$(printf '%s' "$SCOPE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["mode"])')"
 
@@ -188,13 +202,13 @@ print("".join(secrets.choice(alphabet) for _ in range(6)))
 PY
 )"
     if [ -z "${AGENT_ID:-}" ]; then
-      if "$COMMONS_BIN" remote agent register --remote "$COMMONS_REMOTE" --project "$COMMONS_PROJECT" --runtime auto --workspace "$(basename "$PWD")" --handle "$COMMONS_HANDLE" --contact-code "$COMMONS_CONTACT_CODE" --json >/tmp/commons-register.json 2>/tmp/commons-register.err; then
+      if "$COMMONS_BIN" remote agent register --remote "$COMMONS_REMOTE" --project "$COMMONS_PROJECT" --runtime "$COMMONS_AGENT_RUNTIME" --workspace "$(basename "$PWD")" --handle "$COMMONS_HANDLE" --contact-code "$COMMONS_CONTACT_CODE" --json >/tmp/commons-register.json 2>/tmp/commons-register.err; then
         REMOTE_AGENT_JSON="$(cat /tmp/commons-register.json)"
         COMMONS_REGISTERED=true
         break
       fi
     else
-      if "$COMMONS_BIN" remote agent register --remote "$COMMONS_REMOTE" --project "$COMMONS_PROJECT" --agent "$AGENT_ID" --runtime auto --workspace "$(basename "$PWD")" --handle "$COMMONS_HANDLE" --contact-code "$COMMONS_CONTACT_CODE" --json >/tmp/commons-register.json 2>/tmp/commons-register.err; then
+      if "$COMMONS_BIN" remote agent register --remote "$COMMONS_REMOTE" --project "$COMMONS_PROJECT" --agent "$AGENT_ID" --runtime "$COMMONS_AGENT_RUNTIME" --workspace "$(basename "$PWD")" --handle "$COMMONS_HANDLE" --contact-code "$COMMONS_CONTACT_CODE" --json >/tmp/commons-register.json 2>/tmp/commons-register.err; then
         REMOTE_AGENT_JSON="$(cat /tmp/commons-register.json)"
         COMMONS_REGISTERED=true
         break
@@ -220,7 +234,7 @@ PY
   "$COMMONS_BIN" remote lease list --remote "$COMMONS_REMOTE" --project "$COMMONS_PROJECT" --active
 elif [ "$COMMONS_MODE" = "local" ]; then
   "$COMMONS_BIN" doctor --json
-  "$COMMONS_BIN" agent register --runtime auto --workspace "$PWD"
+  "$COMMONS_BIN" agent register --runtime "$COMMONS_AGENT_RUNTIME" --workspace "$PWD"
   COMMONS_LOCAL_SCOPE="$(printf '%s' "$SCOPE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("scope") or "local")')"
   echo "Commons scope: local-only, scope=$COMMONS_LOCAL_SCOPE"
   "$COMMONS_BIN" inbox
@@ -248,7 +262,7 @@ The relay has four identity fields:
 
 - `agent_id`: internal unique session id.
 - `user_name`: the explicitly confirmed human owner, such as `Sergio`.
-- `handle`: human-readable address such as `@sergio-codex-main`. Every new
+- `handle`: human-readable address such as `@sergio-cline-main`. Every new
   handle begins with the normalized user prefix.
 - `contact_code`: short shareable code such as `A7K2Q9`.
 
@@ -259,11 +273,11 @@ registrations that omit or contradict it. The relay also rejects duplicate
 handles and contact codes within the configured private relay project:
 
 ```bash
-"$COMMONS_BIN" remote agent register --remote "$COMMONS_REMOTE" --project "$COMMONS_PROJECT" --agent "$AGENT_ID" --runtime auto --workspace "$(basename "$PWD")" --handle codex-main --contact-code A7K2Q9
+"$COMMONS_BIN" remote agent register --remote "$COMMONS_REMOTE" --project "$COMMONS_PROJECT" --agent "$AGENT_ID" --runtime "$COMMONS_AGENT_RUNTIME" --workspace "$(basename "$PWD")" --handle "${COMMONS_AGENT_RUNTIME}-main" --contact-code A7K2Q9
 ```
 
-With `Sergio` configured, the example is registered as
-`@sergio-codex-main`. Existing unattributed Agents remain readable and can
+With `Sergio` configured and Cline as the runtime, the example is registered as
+`@sergio-cline-main`. Existing unattributed Agents remain readable and can
 finish their current work, but every newly created Agent must be attributed.
 
 List discoverable agents in remote mode:

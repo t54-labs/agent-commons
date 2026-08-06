@@ -53,6 +53,17 @@ SKILL_TARGET_GROUPS = {
     "both": ("codex", "claude"),
     "all": SKILL_TARGETS,
 }
+RUNTIME_ALIASES = {
+    "codex-cli": "codex",
+    "claude": "claude-code",
+    "claude-cli": "claude-code",
+    "cline-cli": "cline",
+}
+AUTO_RUNTIME_MARKERS = (
+    (("CODEX_THREAD_ID", "CODEX_INTERNAL_ORIGINATOR_OVERRIDE"), "codex"),
+    (("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID"), "claude-code"),
+    (("CLINE_DATA_DIR", "CLINE_HOOKS_DIR", "CLINE_SESSION_ID"), "cline"),
+)
 
 SECRET_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"sk-[A-Za-z0-9_-]{16,}"),
@@ -69,6 +80,21 @@ class PolicyDenied(CommonsError):
     def __init__(self, message: str, details: dict[str, Any]):
         super().__init__(message)
         self.details = details
+
+
+def resolve_runtime(runtime: str | None) -> str:
+    requested = (runtime or "custom").strip().lower()
+    if requested != "auto":
+        return RUNTIME_ALIASES.get(requested, requested or "custom")
+
+    configured = os.environ.get("COMMONS_AGENT_RUNTIME", "").strip().lower()
+    if configured and configured != "auto":
+        return RUNTIME_ALIASES.get(configured, configured)
+
+    for markers, detected in AUTO_RUNTIME_MARKERS:
+        if any(os.environ.get(marker) for marker in markers):
+            return detected
+    return "custom"
 
 
 def initialize() -> dict[str, Any]:

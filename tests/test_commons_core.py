@@ -1982,13 +1982,17 @@ class CommonsCoreTests(unittest.TestCase):
             installed_skill = (paths["codex"] / "SKILL.md").read_text(encoding="utf-8")
             self.assertIn("scope-first", installed_skill)
             self.assertIn("pipx install agent-commons==0.4.0", installed_skill)
+            self.assertIn("commons install-skill --target all --scope user", installed_skill)
             self.assertIn("Commons 0.4.0 or newer is required", installed_skill)
+            self.assertIn("Cline", installed_skill)
+            self.assertIn("COMMONS_AGENT_RUNTIME", installed_skill)
             self.assertIn("contact_code", installed_skill)
             self.assertIn("Commons scope", installed_skill)
             self.assertIn("scope resolve", installed_skill)
             self.assertIn("commons user set", installed_skill)
             self.assertIn("Never infer the human name", installed_skill)
             self.assertIn("remote msg broadcast", installed_skill)
+            self.assertNotIn("--runtime auto", installed_skill)
             self.assertNotIn("python3 -m commons.cli doctor --fix", installed_skill)
             self.assertFalse((commons_home / "board").exists())
             self.assertTrue(shim.exists())
@@ -2031,6 +2035,20 @@ class CommonsCoreTests(unittest.TestCase):
 
             self.assertEqual([item["target"] for item in installed["installed"]], ["codex", "claude"])
             self.assertFalse((project / ".cline" / "skills" / "commons").exists())
+
+    def test_runtime_resolution_supports_cline_and_never_persists_auto(self) -> None:
+        from commons import service
+
+        self.assertEqual(service.resolve_runtime("cline-cli"), "cline")
+        self.assertEqual(service.resolve_runtime("claude"), "claude-code")
+        self.assertEqual(service.resolve_runtime("codex-cli"), "codex")
+
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(service.resolve_runtime("auto"), "custom")
+        with mock.patch.dict(os.environ, {"COMMONS_AGENT_RUNTIME": "cline"}, clear=True):
+            self.assertEqual(service.resolve_runtime("auto"), "cline")
+        with mock.patch.dict(os.environ, {"CLINE_SESSION_ID": "session-test"}, clear=True):
+            self.assertEqual(service.resolve_runtime("auto"), "cline")
 
     def test_cli_shim_stays_inside_virtual_environment(self) -> None:
         from commons import service
@@ -2512,10 +2530,31 @@ class CommonsCoreTests(unittest.TestCase):
                         extra_env=extra_env,
                     )
                 )
+                cline_env = {**extra_env, "COMMONS_AGENT_RUNTIME": "cline"}
+                agent_c = json_stdout(
+                    run_cli(
+                        home,
+                        "remote",
+                        "agent",
+                        "register",
+                        "--agent",
+                        "agent_c",
+                        "--runtime",
+                        "auto",
+                        "--handle",
+                        "cline-gamma",
+                        "--name",
+                        "cline-c",
+                        extra_env=cline_env,
+                    )
+                )
                 self.assertEqual(agent_a["agent_id"], "agent_a")
                 self.assertEqual(agent_b["agent_id"], "agent_b")
+                self.assertEqual(agent_c["agent_id"], "agent_c")
                 self.assertEqual(agent_a["handle"], "test-user-codex-alpha")
                 self.assertEqual(agent_b["handle"], "test-user-claude-beta")
+                self.assertEqual(agent_c["handle"], "test-user-cline-gamma")
+                self.assertEqual(agent_c["runtime"], "cline")
                 self.assertEqual(agent_a["contact_code"], "C7DX92")
                 self.assertEqual(agent_a["workspace"], "secret-repo")
                 self.assertTrue(agent_a["workspace_path_redacted"])
@@ -2572,7 +2611,10 @@ class CommonsCoreTests(unittest.TestCase):
                 self.assertEqual(file_remote_agent["agent_id"], "agent_file")
 
                 agents = json_stdout(run_cli(home, "remote", "agent", "list", extra_env=extra_env))
-                self.assertEqual({item["agent_id"] for item in agents}, {"agent_a", "agent_b", "agent_file", "agent_header"})
+                self.assertEqual(
+                    {item["agent_id"] for item in agents},
+                    {"agent_a", "agent_b", "agent_c", "agent_file", "agent_header"},
+                )
                 self.assertTrue(all(item["presence"] == "online" for item in agents))
                 heartbeat = json_stdout(
                     run_cli(
@@ -2981,7 +3023,7 @@ class CommonsCoreTests(unittest.TestCase):
                 self.assertEqual(village["workspace"]["name"], "Test Workspace")
                 self.assertEqual(village["agent_limit_per_project"], 12)
                 demo_village = next(item for item in village["projects"] if item["project"]["project_id"] == "demo")
-                self.assertEqual(demo_village["project"]["agent_count"], 4)
+                self.assertEqual(demo_village["project"]["agent_count"], 5)
                 self.assertTrue(demo_village["agents"])
                 self.assertTrue(all(agent["presence"] != "offline" for agent in demo_village["agents"]))
                 self.assertLessEqual(len(demo_village["agents"]), village["agent_limit_per_project"])
@@ -2991,7 +3033,7 @@ class CommonsCoreTests(unittest.TestCase):
                 with local_urlopen(project_request, timeout=1) as response:
                     project_console = json.loads(response.read().decode("utf-8"))
                 self.assertEqual(project_console["project"]["project_id"], "demo")
-                self.assertGreaterEqual(len(project_console["agents"]), 4)
+                self.assertGreaterEqual(len(project_console["agents"]), 5)
                 self.assertEqual(project_console["tasks"][0]["task_id"], task["task_id"])
                 self.assertTrue(any(message["message_id"] == msg["message_id"] for message in project_console["messages"]))
                 self.assertTrue(all(message["recipient_agent_id"] is None for message in project_console["broadcasts"]))
@@ -3017,15 +3059,15 @@ class CommonsCoreTests(unittest.TestCase):
                 self.assertNotIn("leases", project_summary)
 
                 agents_request = urllib.request.Request(
-                    f"{url}/v1/console/projects/demo/agents?limit=2&filter=all",
+                    f"{url}/v1/console/projects/demo/agents?limit=3&filter=all",
                     headers=console_headers,
                 )
                 with local_urlopen(agents_request, timeout=1) as response:
                     first_agents_page = json.loads(response.read().decode("utf-8"))
-                self.assertEqual(len(first_agents_page["agents"]), 2)
+                self.assertEqual(len(first_agents_page["agents"]), 3)
                 self.assertTrue(first_agents_page["page"]["has_more"])
                 agent_cursor = first_agents_page["page"]["next_cursor"]
-                next_agent_query = urllib.parse.urlencode({"limit": 2, "filter": "all", "cursor": agent_cursor})
+                next_agent_query = urllib.parse.urlencode({"limit": 3, "filter": "all", "cursor": agent_cursor})
                 next_agents_request = urllib.request.Request(
                     f"{url}/v1/console/projects/demo/agents?{next_agent_query}",
                     headers=console_headers,
@@ -3035,7 +3077,10 @@ class CommonsCoreTests(unittest.TestCase):
                 first_agent_ids = {agent["agent_id"] for agent in first_agents_page["agents"]}
                 second_agent_ids = {agent["agent_id"] for agent in second_agents_page["agents"]}
                 self.assertFalse(first_agent_ids & second_agent_ids)
-                self.assertEqual(first_agent_ids | second_agent_ids, {"agent_a", "agent_b", "agent_file", "agent_header"})
+                self.assertEqual(
+                    first_agent_ids | second_agent_ids,
+                    {"agent_a", "agent_b", "agent_c", "agent_file", "agent_header"},
+                )
 
                 message_request = urllib.request.Request(
                     f"{url}/v1/console/projects/demo/messages?limit=1",
