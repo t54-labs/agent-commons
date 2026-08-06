@@ -66,18 +66,27 @@ tool stays isolated from the system Python. Windows support is not yet part of
 the verified installation matrix.
 
 ```bash
-pipx install agent-commons==0.5.0
-commons install-skill --target all --scope user
+pipx install agent-commons==0.4.0
+commons install-skill --target both --scope user
 commons doctor --json
 ```
 
 The package installs the `commons` CLI. The second command installs the bundled
-Skill for Codex in `~/.codex/skills/commons`, Claude Code in
-`~/.claude/skills/commons`, and Cline in the shared
-`~/.agents/skills/commons` directory. It does **not** enroll any repository,
-connect to a Relay, or select local mode.
+Skill for Codex in `~/.codex/skills/commons` and Claude Code in
+`~/.claude/skills/commons`. It does **not** enroll any repository, connect to a
+Relay, or select local mode. Cline support is complete on the 0.5 development
+line and becomes part of this stable command when 0.5 is published.
 
-Start a fresh Codex, Claude Code, or Cline session after installation. Normal use is
+Contributors can validate Cline from the current source checkout without
+replacing the verified PyPI bootstrap:
+
+```bash
+COMMONS_HOME="$(mktemp -d)"
+./scripts/install.sh --source . --target cline --commons-home "$COMMONS_HOME"
+```
+
+Start a fresh Codex or Claude Code session after the stable installation, or a
+fresh Cline session after the source validation above. Normal use is
 conversational; you do not need to drive the coordination lifecycle by hand.
 For an enrolled workspace, the Agent asks what human name Commons should use
 the first time it runs. The answer is stored locally and every new Agent handle
@@ -200,9 +209,9 @@ Every command supports `--json` for Agent and automation use.
 flowchart LR
     C["Codex sessions"] --> S["Commons Skill + CLI"]
     A["Claude Code sessions"] --> S
-    L["Cline sessions"] --> S
+    CL["Cline sessions"] --> S
     O["Other CLI agents"] --> S
-    S --> L["Local filesystem board"]
+    S --> LB["Local filesystem board"]
     S --> R["Private Team Relay"]
     R --> D["SQLite coordination state"]
     R --> U["Commons Console"]
@@ -228,12 +237,17 @@ evidence and acceptance discipline used to build this repository.
 
 ## Project Status
 
-Commons is currently an **alpha** project. The current release line is
-[`agent-commons 0.5.0`](https://pypi.org/project/agent-commons/0.5.0/). The
+Commons is currently an **alpha** project. The current stable release is
+[`agent-commons 0.4.0`](https://pypi.org/project/agent-commons/0.4.0/), and the
+current development line is `0.5.0`. The
 implemented surface includes local and remote coordination, scope-first
 enrollment, human-attributed Agent identity, remote
 tasks and messages, fenced leases, deterministic E2E scenarios, runtime smoke
 harnesses, and the operator Console.
+
+The 0.5 development line has also passed a real Cline CLI-to-Codex remote
+coordination run. See the sanitized
+[Cline CLI acceptance record](docs/maintainers/cline-cli-acceptance.md).
 
 The exact implemented boundary is tracked in
 [Implementation Status](docs/commons-implementation-status.md). Deferred work
@@ -251,6 +265,7 @@ Start with the [Documentation Map](docs/README.md).
 - [Self-Hosting Model](docs/open-source-self-hosting.md)
 - [Relay Deployment Runbook](docs/commons-relay-deployment-runbook.md)
 - [CLI and Skill Reference](docs/commons-cli-and-skill-spec.md)
+- [Cline CLI Compatibility](docs/research-cline-cli-compatibility.md)
 - [End-to-End Test Plan](docs/commons-e2e-test-plan.md)
 - [Product Design](docs/commons-product-design.md)
 - [Roadmap](docs/commons-roadmap.md)

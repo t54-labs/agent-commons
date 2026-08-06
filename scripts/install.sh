@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source_ref="${COMMONS_INSTALL_SOURCE:-agent-commons==0.5.0}"
-target="all"
+source_ref="${COMMONS_INSTALL_SOURCE:-agent-commons==0.4.0}"
+target="both"
 scope="user"
 project_dir=""
 commons_home="${COMMONS_HOME:-$HOME/.commons}"
@@ -16,7 +16,7 @@ Usage:
   ./scripts/install.sh [options]
 
 Options:
-  --source <path-or-pip-ref>  Package source (default: agent-commons==0.5.0 from PyPI)
+  --source <path-or-pip-ref>  Package source (default: agent-commons==0.4.0 from PyPI)
   --target <all|both|codex|claude|cline>
   --scope <user|project>
   --project-dir <path>        Destination project for project-scoped Skills
@@ -26,7 +26,7 @@ Options:
 
 Examples:
   ./scripts/install.sh
-  ./scripts/install.sh --source .
+  ./scripts/install.sh --source . --target all
   ./scripts/install.sh --source agent-commons
   ./scripts/install.sh --target codex
   ./scripts/install.sh --source . --scope project --project-dir "$PWD"

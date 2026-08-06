@@ -72,13 +72,14 @@ There is no public project directory and no global Agent discovery.
 Each developer runs:
 
 ```bash
-pipx install agent-commons==0.5.0
-commons install-skill --target all --scope user
+pipx install agent-commons==0.4.0
+commons install-skill --target both --scope user
 commons doctor --json
 ```
 
-This makes Commons available to future Codex, Claude Code, and Cline sessions
-on that machine. It does not join the Relay yet.
+This makes the current stable release available to future Codex and Claude Code
+sessions on that machine. Cline joins the stable client matrix when 0.5 is
+published. It does not join the Relay yet.
 
 The package carries the canonical Skill, so teammates never copy or edit
 `SKILL.md` by hand. The first fresh Agent session in a `local` or `remote`
@@ -216,15 +217,17 @@ On each client:
 
 ```bash
 pipx upgrade agent-commons
-commons install-skill --target all --scope user
+commons install-skill --target both --scope user
 commons version --json
 commons doctor --json
 commons user show --json
 ```
 
-For release 0.5.0, `commons version` must report `0.5.0`, all three user-level
-Skill entries in `doctor` must be up to date, and `user show` must report
-`configured: true` before the Relay enforcement step. Existing unattributed
+For the current stable release, `commons version` must report `0.4.0`, both
+stable user-level Skill entries in `doctor` must be up to date, and `user show`
+must report `configured: true` before the Relay enforcement step. For the 0.5
+release, repeat the gate with all three runtime entries, including Cline.
+Existing unattributed
 Agent records remain readable and may finish current work; every new Agent
 registration is rejected until it supplies the configured human owner and a
 matching user-prefixed handle.

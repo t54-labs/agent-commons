@@ -29,8 +29,8 @@ required.
 Install the verified release in an isolated environment:
 
 ```bash
-pipx install agent-commons==0.5.0
-commons install-skill --target all --scope user
+pipx install agent-commons==0.4.0
+commons install-skill --target both --scope user
 commons doctor --json
 ```
 
@@ -44,7 +44,7 @@ provide:
 - the `commons` and `commonsd` commands through pipx
 - the Codex Skill at `~/.codex/skills/commons/SKILL.md`
 - the Claude Code Skill at `~/.claude/skills/commons/SKILL.md`
-- the Cline Skill at `~/.agents/skills/commons/SKILL.md`
+- the Cline Skill at `~/.agents/skills/commons/SKILL.md` after the 0.5 release
 - a stable fallback command at `~/.commons/bin/commons`
 
 The installation does not enroll a workspace or connect to a Relay. A normal
@@ -58,7 +58,7 @@ commons version --json
 commons doctor --json
 ```
 
-Expected evidence includes version `0.5.0`, `ok: true`, user-level Skill
+Expected evidence includes version `0.4.0`, `ok: true`, user-level Skill
 entries for the runtimes you installed, and a `user` identity result. A missing
 `codex`, `claude`, or `cline` executable is a warning when that runtime is not
 installed on the machine.
@@ -78,6 +78,14 @@ cline skill list -g --json
 The result must list `commons` at `~/.agents/skills/commons` for the Cline
 runtime. This verifies runtime discovery; `commons doctor --json` independently
 verifies that the installed file matches the package template.
+
+Until 0.5 is published, this Cline check is for contributors using the source
+installer:
+
+```bash
+COMMONS_HOME="$(mktemp -d)"
+./scripts/install.sh --source . --target cline --commons-home "$COMMONS_HOME"
+```
 
 The Agent first resolves workspace scope. If the workspace has never been
 enrolled, it must ask before registering, broadcasting, reading a Commons
@@ -221,7 +229,7 @@ sessions so they load the new Skill:
 
 ```bash
 pipx upgrade agent-commons
-commons install-skill --target all --scope user
+commons install-skill --target both --scope user
 commons doctor --json
 ```
 

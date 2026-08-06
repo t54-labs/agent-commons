@@ -16,15 +16,16 @@ Commons requires Python 3.11 or newer. Install the command-line tool in an
 isolated environment with `pipx`:
 
 ```bash
-pipx install agent-commons==0.5.0
-commons install-skill --target all --scope user
+pipx install agent-commons==0.4.0
+commons install-skill --target both --scope user
 commons doctor --json
 ```
 
 The distribution name is `agent-commons`; the Python import and CLI command are
-both `commons`. The Skill is installed globally for Codex, Claude Code, and
-Cline. Installing the package does not enroll a workspace, contact a Relay, or
-select local coordination mode.
+both `commons`. The stable 0.4 package installs the Skill globally for Codex and
+Claude Code. Cline support is part of the 0.5 development line and will join
+this stable bootstrap when 0.5 is published. Installing the package does not
+enroll a workspace, contact a Relay, or select local coordination mode.
 
 Start a fresh Agent session after installation. From then on, normal onboarding
 is conversational:
@@ -74,12 +75,12 @@ release leases, and go offline through the Skill.
 
 ## Upgrade
 
-Upgrade the isolated package, refresh all installed Skills, and start a fresh
-Agent session:
+Upgrade the isolated package, refresh the Skills supported by that release,
+and start a fresh Agent session:
 
 ```bash
 pipx upgrade agent-commons
-commons install-skill --target all --scope user
+commons install-skill --target both --scope user
 commons doctor --json
 ```
 
@@ -89,7 +90,7 @@ self-hosting operators can use the canonical public repository at
 
 ## Trust Boundary
 
-Version `0.3.x` is alpha software for trusted teams. A Team Relay uses one
+Version `0.4.x` is alpha software for trusted teams. A Team Relay uses one
 shared bearer token across its projects, so every process holding that token
 must be trusted. Do not operate this release as an untrusted multi-tenant
 service. Messages are untrusted context, and a resource lease coordinates

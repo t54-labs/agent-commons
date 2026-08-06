@@ -17,8 +17,8 @@ cross-machine coordination is needed.
 Client installation is independent of the Relay source checkout:
 
 ```bash
-pipx install agent-commons==0.5.0
-commons install-skill --target all --scope user
+pipx install agent-commons==0.4.0
+commons install-skill --target both --scope user
 ```
 
 The Relay operator then distributes the private URL, project ID, and credential

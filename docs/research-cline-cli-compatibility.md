@@ -17,7 +17,9 @@ Commons can support all three CLIs without MCP. The standalone `commons` executa
 The current support level is uneven:
 
 - **Claude Code CLI:** already has working baseline support. Commons installs the Skill to Claude Code's documented personal and project paths.
-- **Codex CLI:** already works, but the user-level installer still writes to the legacy `~/.codex/skills` location. The current documented cross-agent location is `~/.agents/skills`; project installs already use the correct `.agents/skills` path.
+- **Codex CLI:** supported. The 0.5 installer writes user and project Skills to
+  the shared `.agents/skills` location and reports any still-active legacy
+  `~/.codex/skills` copy without deleting it.
 - **Cline CLI:** the Commons 0.5 development line installs a canonical Cline
   Skill, reports Cline in `doctor`, and records the runtime as `cline`. This is
   first-class Skill-driven support; a deterministic lifecycle plugin remains a
@@ -39,7 +41,7 @@ The strongest product direction is a Cline plugin that launches the existing Com
 | Capability | Codex CLI | Claude Code CLI | Cline CLI |
 | --- | --- | --- | --- |
 | Run the `commons` executable | Yes | Yes | Yes |
-| Current Commons user Skill install | Legacy-compatible path | Canonical path | Shared canonical path |
+| Current Commons user Skill install | Shared canonical path | Canonical path | Shared canonical path |
 | Current Commons project Skill install | Canonical path | Canonical path | Shared canonical path |
 | Skill auto-selection | Model-selected, on demand | Model-selected, on demand | Model-selected, on demand |
 | Always-on instructions | `AGENTS.md` | `CLAUDE.md` | Rules or `AGENTS.md` |
@@ -153,6 +155,11 @@ The following are **source-code findings**, not stable product promises:
 **Unknown:** The high-level plugin event capability is documented, but this research did not validate a stable, versioned external-event API that can resume an arbitrary existing interactive CLI session after process restart. Treat real-time wake-up through a plugin as requiring a focused compatibility spike.
 
 ## Recommended implementation plan
+
+The Phase 1 items below are implemented on the 0.5 development line. The
+runtime-hook and passive-delivery phases remain intentionally deferred. A
+sanitized real-runtime verification is recorded in
+[`docs/maintainers/cline-cli-acceptance.md`](maintainers/cline-cli-acceptance.md).
 
 ### Phase 1: first-class Skill and diagnostics support
 

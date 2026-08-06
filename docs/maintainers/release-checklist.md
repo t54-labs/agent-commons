@@ -67,7 +67,7 @@ each completed gate.
 - [ ] No historical release workflow rebuilds or republishes the preserved bootstrap assets.
 - [ ] `make public-check` and an independent secret scanner pass on the candidate and both public commits.
 - [ ] Anonymous clone works from a clean machine or container.
-- [ ] `./scripts/install.sh --source .` installs Codex, Claude Code, and Cline Skills in an isolated HOME.
+- [ ] `./scripts/install.sh --source . --target all` installs Codex, Claude Code, and Cline Skills in an isolated HOME.
 - [ ] README local links and images render on GitHub.
 - [ ] Five-minute path succeeds without maintainer assistance.
 - [ ] Docker quick start binds to localhost by default.

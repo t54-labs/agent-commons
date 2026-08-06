@@ -2140,6 +2140,7 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertIn(f"<{ROOT.resolve()}>", calls[0])
             self.assertTrue(calls[1].startswith(f"PWD={commons_home.resolve()}|"))
             self.assertIn("<-I><-m><commons.cli><install-skill>", calls[1])
+            self.assertIn("<--target><both>", calls[1])
 
     def test_runtime_smoke_prepare_and_verify(self) -> None:
         with tempfile.TemporaryDirectory() as td:

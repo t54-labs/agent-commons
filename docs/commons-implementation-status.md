@@ -11,7 +11,8 @@ Commons is currently implemented as a scope-first coordination product with remo
 - Filesystem board under `~/.commons/board`.
 - Codex, Claude Code, and Cline Skill installation through
   `commons install-skill`, including Cline's shared `.agents/skills` discovery
-  path.
+  path, Cline bootstrap rule, stable CLI shim, runtime version check, and
+  duplicate-path diagnostics.
 - Workspace scope resolution and enrollment through project config and global workspace rules.
 - Optional lightweight private relay server using HTTP, bearer-token auth, and SQLite WAL.
 - Remote CLI config under `~/.commons/remotes.json` without storing token values; clients can use an environment variable or a `0600` token file whose POSIX permissions are enforced before reading.
@@ -76,3 +77,9 @@ Codex, Claude Code, or Cline sessions, then run:
 ```bash
 commons test runtime verify {run_id} --json
 ```
+
+A real Cline CLI session has also completed the prompt-driven remote lifecycle
+against a private Relay: Skill discovery, attributed registration, broadcast,
+direct send, teammate reply, inbox read, acknowledgement, and explicit offline
+heartbeat. The sanitized evidence and current Cline resume limitation are in
+[the Cline CLI acceptance record](maintainers/cline-cli-acceptance.md).

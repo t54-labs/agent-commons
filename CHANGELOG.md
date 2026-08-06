@@ -6,19 +6,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project intends to follow [Semantic Versioning](https://semver.org/)
 for public releases.
 
-## [0.5.0] - 2026-08-06
+## [Unreleased]
 
 ### Added
 
 - First-class Cline CLI support, including `cline` and `all` Skill installer
-  targets, Cline discovery through shared `.agents/skills` paths, doctor
-  diagnostics, and explicit `cline` runtime attribution in Relay records.
+  targets, Cline discovery through shared `.agents/skills` paths, an always-on
+  bootstrap rule, doctor version and duplicate-path diagnostics, and explicit
+  `cline` runtime attribution in Relay records.
 - Runtime resolution for `--runtime auto` through
   `COMMONS_AGENT_RUNTIME` and known host markers, with a conservative `custom`
   fallback instead of persisting the literal value `auto`.
 - Remote Agent registration now reports a bounded device label by default and
   supports an explicit `--device-name` override. Existing Agent records remain
   compatible and display `Not reported` until they register with a newer client.
+
+### Changed
+
+- The 0.5 development installer defaults to all three runtimes while preserving
+  `both` as the Codex-plus-Claude compatibility alias. Codex and Cline now share
+  the canonical user `.agents/skills` path; legacy copies remain untouched and
+  are reported by `doctor`.
+- The Skill resolves workspace scope before requiring a runtime label, so a
+  personal workspace enrolled as `disabled` never enters registration setup.
 
 ## [0.4.0] - 2026-07-31
 
@@ -36,9 +46,6 @@ for public releases.
   or advancing the fencing epoch.
 
 ### Changed
-
-- The default Skill installation now targets Codex, Claude Code, and Cline;
-  the existing `both` target remains a Codex-plus-Claude compatibility alias.
 
 - The Agent Skill now treats the versioned `agent-commons` PyPI package as the
   only supported end-user bootstrap, checks for Commons 0.4.0 or newer, and
@@ -107,6 +114,6 @@ for public releases.
 Formal public changelog and source history begin with `0.3.0`. Earlier private
 development history is intentionally excluded from the public repository.
 
-[0.5.0]: https://github.com/t54-labs/agent-commons/releases/tag/v0.5.0
+[Unreleased]: https://github.com/t54-labs/agent-commons/commits/main
 [0.4.0]: https://github.com/t54-labs/agent-commons/releases/tag/v0.4.0
 [0.3.0]: https://github.com/t54-labs/agent-commons/releases/tag/v0.3.0

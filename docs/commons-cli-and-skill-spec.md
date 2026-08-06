@@ -6,8 +6,8 @@ End-user installation is provided by the `agent-commons` PyPI distribution.
 The source repository is not part of the runtime lookup path.
 
 ```bash
-pipx install agent-commons==0.5.0
-commons install-skill --target all --scope user
+pipx install agent-commons==0.4.0
+commons install-skill --target both --scope user
 ```
 
 Primary CLI:
@@ -356,7 +356,7 @@ Scopes:
 Install paths:
 
 ```text
-Codex user scope:   ~/.codex/skills/commons
+Codex user scope:   ~/.agents/skills/commons
 Codex project scope: <project>/.agents/skills/commons
 Claude user scope:  ~/.claude/skills/commons
 Claude project scope: <project>/.claude/skills/commons
@@ -364,10 +364,24 @@ Cline user scope:   ~/.agents/skills/commons
 Cline project scope: <project>/.agents/skills/commons
 ```
 
-Cline and Codex intentionally share the project `.agents/skills` location.
-Installing `all` may therefore copy the same canonical Skill to that project
-destination twice, but both target reports remain explicit and the resulting
-file is identical.
+Cline and Codex intentionally share the canonical `.agents/skills` location at
+both user and project scope. Installing `all` may therefore copy the same Skill
+to that destination twice, but both target reports remain explicit and the
+resulting file is identical. `doctor` reports active legacy copies under
+`~/.codex/skills` or Cline-specific Skill paths so users can remove them only
+after verifying the canonical installation.
+
+Cline installation also writes a uniquely named bootstrap rule:
+
+```text
+Cline user rule:    ~/.cline/rules/commons-bootstrap.md
+Cline project rule: <project>/.clinerules/commons-bootstrap.md
+```
+
+The rule identifies the runtime as `cline`, points Cline-launched commands at
+the stable shim, and requires scope resolution before any registration or
+shared side effect. It does not install hooks or keep a background process
+alive.
 
 `install-skill` also creates or refreshes the stable local CLI shim:
 

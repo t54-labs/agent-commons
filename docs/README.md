@@ -29,6 +29,7 @@ from the deeper product and implementation records used by maintainers.
 | --- | --- |
 | [CLI and Skill Specification](commons-cli-and-skill-spec.md) | You need command contracts, JSON shapes, or Skill lifecycle rules. |
 | [Commons Skill](../.agents/skills/commons/SKILL.md) | You are reviewing the instructions installed into Codex, Claude Code, and Cline. |
+| [Cline CLI Compatibility](research-cline-cli-compatibility.md) | You need the Cline Skill, rule, runtime, and deferred adapter boundaries. |
 | [Multi-Agent Demo](../examples/multi-agent-demo/README.md) | You want a recording-safe contention and handoff scenario. |
 
 ## Product and Delivery Records
@@ -62,6 +63,7 @@ records, not the recommended first read for a new user.
 | [Launch Campaign](maintainers/launch-campaign.md) | Positioning, channels, campaign cadence, copy, and success metrics. |
 | [Demo and Recording Script](maintainers/demo-script.md) | Reproducible short and long product demos. |
 | [Release Checklist](maintainers/release-checklist.md) | Technical and communication gates for a public release. |
+| [Cline CLI Acceptance](maintainers/cline-cli-acceptance.md) | Sanitized evidence from the real Cline-to-Codex remote coordination gate. |
 | [PyPI Trusted Publishing](maintainers/trusted-publishing.md) | OIDC publisher identity, approval, first-release, and token-retirement procedure. |
 | [Public Repository Cutover](maintainers/public-repository-cutover.md) | Clean two-commit history generation, private archive preservation, and public launch gates. |
 

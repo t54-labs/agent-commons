@@ -117,6 +117,7 @@ def validate_wheel(path: Path, version: str) -> list[str]:
         metadata = parse_metadata(archive.read(metadata_names[0]).decode("utf-8"))
         failures.extend(validate_core_metadata(metadata, version, path.name))
         required_suffixes = (
+            "commons/cline_template/commons-bootstrap.md",
             "commons/skill_template/SKILL.md",
             ".dist-info/licenses/LICENSE",
             ".dist-info/licenses/NOTICE",
@@ -142,6 +143,7 @@ def validate_sdist(path: Path, version: str) -> list[str]:
         required_suffixes = (
             "/LICENSE",
             "/NOTICE",
+            "/commons/cline_template/commons-bootstrap.md",
             "/commons/skill_template/SKILL.md",
         )
         for suffix in required_suffixes:
