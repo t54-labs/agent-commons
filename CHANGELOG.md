@@ -6,7 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project intends to follow [Semantic Versioning](https://semver.org/)
 for public releases.
 
-## [Unreleased]
+## [0.5.0] - 2026-08-06
 
 ### Added
 
@@ -107,6 +107,6 @@ for public releases.
 Formal public changelog and source history begin with `0.3.0`. Earlier private
 development history is intentionally excluded from the public repository.
 
-[Unreleased]: https://github.com/t54-labs/agent-commons/commits/main
+[0.5.0]: https://github.com/t54-labs/agent-commons/releases/tag/v0.5.0
 [0.4.0]: https://github.com/t54-labs/agent-commons/releases/tag/v0.4.0
 [0.3.0]: https://github.com/t54-labs/agent-commons/releases/tag/v0.3.0
