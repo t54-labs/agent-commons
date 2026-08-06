@@ -53,6 +53,7 @@ SKILL_TARGET_GROUPS = {
     "both": ("codex", "claude"),
     "all": SKILL_TARGETS,
 }
+CLINE_RULE_NAME = "commons-bootstrap.md"
 RUNTIME_ALIASES = {
     "codex-cli": "codex",
     "claude": "claude-code",
@@ -120,6 +121,13 @@ def skill_source_dir() -> Path:
     raise CommonsError(f"cannot locate Commons skill source at {source} or {packaged_source}")
 
 
+def cline_rule_source_path() -> Path:
+    source = Path(__file__).resolve().parent / "cline_template" / CLINE_RULE_NAME
+    if source.exists():
+        return source
+    raise CommonsError(f"cannot locate Commons Cline rule source at {source}")
+
+
 def cli_shim_path() -> Path:
     return bin_dir() / "commons"
 
@@ -166,7 +174,7 @@ def skill_install_path(target: str, scope: str, project: Path) -> Path:
         raise CommonsError(f"unknown skill scope: {scope}")
     if scope == "user":
         roots = {
-            "codex": Path.home() / ".codex" / "skills",
+            "codex": Path.home() / ".agents" / "skills",
             "claude": Path.home() / ".claude" / "skills",
             "cline": Path.home() / ".agents" / "skills",
         }
@@ -177,6 +185,31 @@ def skill_install_path(target: str, scope: str, project: Path) -> Path:
             "cline": project / ".agents" / "skills",
         }
     return roots[target] / "commons"
+
+
+def alternate_skill_install_paths(target: str, scope: str, project: Path) -> tuple[Path, ...]:
+    if scope == "user":
+        paths = {
+            "codex": (Path.home() / ".codex" / "skills" / "commons",),
+            "claude": (),
+            "cline": (Path.home() / ".cline" / "skills" / "commons",),
+        }
+    else:
+        paths = {
+            "codex": (),
+            "claude": (),
+            "cline": (
+                project / ".cline" / "skills" / "commons",
+                project / ".clinerules" / "skills" / "commons",
+            ),
+        }
+    return paths[target]
+
+
+def cline_rule_install_path(scope: str, project: Path) -> Path:
+    if scope == "user":
+        return Path.home() / ".cline" / "rules" / CLINE_RULE_NAME
+    return project / ".clinerules" / CLINE_RULE_NAME
 
 
 def install_skill(target: str = "all", scope: str = "user", project_dir: str | None = None) -> dict[str, Any]:
@@ -191,7 +224,14 @@ def install_skill(target: str = "all", scope: str = "user", project_dir: str | N
         dest = skill_install_path(item, scope, project)
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source, dest, dirs_exist_ok=True)
-        installs.append({"target": item, "scope": scope, "path": str(dest)})
+        installed = {"target": item, "scope": scope, "path": str(dest)}
+        if item == "cline":
+            rule_source = cline_rule_source_path()
+            rule_dest = cline_rule_install_path(scope, project)
+            rule_dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(rule_source, rule_dest)
+            installed["rule_path"] = str(rule_dest)
+        installs.append(installed)
     skill_hash = hashlib.sha256((source / "SKILL.md").read_bytes()).hexdigest()
     return {
         "ok": True,
@@ -243,6 +283,24 @@ def doctor(fix: bool = False, project_dir: str | None = None) -> dict[str, Any]:
         project_path = skill_install_path(target, "project", project)
         user_hash = installed_skill_hash(user_path)
         project_hash = installed_skill_hash(project_path)
+        alternate_paths: list[dict[str, Any]] = []
+        for install_scope in ("user", "project"):
+            for alternate in alternate_skill_install_paths(target, install_scope, project):
+                alternate_hash = installed_skill_hash(alternate)
+                alternate_paths.append(
+                    {
+                        "scope": install_scope,
+                        "path": str(alternate),
+                        "installed": alternate_hash is not None,
+                        "sha256": alternate_hash,
+                    }
+                )
+        duplicate_paths = [
+            item["path"]
+            for item in alternate_paths
+            if item["installed"]
+            and ((item["scope"] == "user" and user_hash) or (item["scope"] == "project" and project_hash))
+        ]
         return {
             "user_path": str(user_path),
             "project_path": str(project_path),
@@ -253,6 +311,8 @@ def doctor(fix: bool = False, project_dir: str | None = None) -> dict[str, Any]:
             "expected_sha256": expected_skill_hash,
             "user_up_to_date": bool(user_hash and expected_skill_hash and user_hash == expected_skill_hash),
             "project_up_to_date": bool(project_hash and expected_skill_hash and project_hash == expected_skill_hash),
+            "alternate_paths": alternate_paths,
+            "duplicate_paths": duplicate_paths,
         }
 
     runtime_checks = {
@@ -263,6 +323,23 @@ def doctor(fix: bool = False, project_dir: str | None = None) -> dict[str, Any]:
             "cline": shutil.which("cline"),
         }.items()
     }
+    cline_path = runtime_checks["cline"]["path"]
+    if cline_path:
+        try:
+            version_result = subprocess.run(
+                [cline_path, "--version"],
+                text=True,
+                capture_output=True,
+                timeout=5,
+                check=False,
+            )
+            version_output = (version_result.stdout or version_result.stderr).strip().splitlines()
+            runtime_checks["cline"]["version"] = version_output[0] if version_output else None
+            runtime_checks["cline"]["version_ok"] = version_result.returncode == 0
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            runtime_checks["cline"]["version"] = None
+            runtime_checks["cline"]["version_ok"] = False
+            runtime_checks["cline"]["version_error"] = str(exc)
     shim = cli_shim_path()
     cli_path = shutil.which("commons")
     cli_check = {
@@ -310,6 +387,26 @@ def doctor(fix: bool = False, project_dir: str | None = None) -> dict[str, Any]:
         "source_sha256": expected_skill_hash,
         **{runtime: skill_paths(runtime) for runtime in SKILL_TARGETS},
     }
+    try:
+        rule_source_path = cline_rule_source_path()
+        expected_rule_hash = hashlib.sha256(rule_source_path.read_bytes()).hexdigest()
+    except CommonsError:
+        rule_source_path = None
+        expected_rule_hash = None
+    cline_rules: dict[str, Any] = {
+        "source": str(rule_source_path) if rule_source_path else None,
+        "expected_sha256": expected_rule_hash,
+    }
+    for install_scope in ("user", "project"):
+        rule_path = cline_rule_install_path(install_scope, project)
+        rule_hash = hashlib.sha256(rule_path.read_bytes()).hexdigest() if rule_path.exists() else None
+        cline_rules[f"{install_scope}_path"] = str(rule_path)
+        cline_rules[f"{install_scope}_installed"] = rule_hash is not None
+        cline_rules[f"{install_scope}_sha256"] = rule_hash
+        cline_rules[f"{install_scope}_up_to_date"] = bool(
+            rule_hash and expected_rule_hash and rule_hash == expected_rule_hash
+        )
+    skills["cline"]["rule"] = cline_rules
     for runtime in SKILL_TARGETS:
         check = skills[runtime]
         for install_scope in ("user", "project"):
@@ -318,6 +415,27 @@ def doctor(fix: bool = False, project_dir: str | None = None) -> dict[str, Any]:
                     f"{runtime} {install_scope} Commons skill is outdated; "
                     f"run commons install-skill --target {runtime} --scope {install_scope}"
                 )
+        if check["duplicate_paths"]:
+            warnings.append(
+                f"{runtime} Commons skill is active from multiple paths: "
+                f"{', '.join(check['duplicate_paths'])}; remove the legacy copy after verifying the canonical installation"
+            )
+    for install_scope in ("user", "project"):
+        if skills["cline"][f"{install_scope}_installed"]:
+            rule_check = cline_rules[f"{install_scope}_installed"]
+            rule_current = cline_rules[f"{install_scope}_up_to_date"]
+            if not rule_check:
+                warnings.append(
+                    f"cline {install_scope} Commons bootstrap rule is missing; "
+                    f"run commons install-skill --target cline --scope {install_scope}"
+                )
+            elif not rule_current:
+                warnings.append(
+                    f"cline {install_scope} Commons bootstrap rule is outdated; "
+                    f"run commons install-skill --target cline --scope {install_scope}"
+                )
+    if cline_path and not runtime_checks["cline"].get("version_ok"):
+        warnings.append("cline runtime was found but its version could not be read")
 
     return {
         "ok": not errors,

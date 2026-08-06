@@ -1946,6 +1946,8 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertTrue(report["skills"]["codex"]["project_up_to_date"])
             self.assertTrue(report["skills"]["claude"]["project_up_to_date"])
             self.assertTrue(report["skills"]["cline"]["project_up_to_date"])
+            self.assertTrue(report["skills"]["cline"]["rule"]["project_installed"])
+            self.assertTrue(report["skills"]["cline"]["rule"]["project_up_to_date"])
             self.assertIn("cline", report["runtimes"])
 
             (paths["codex"] / "SKILL.md").write_text("outdated\n", encoding="utf-8")
@@ -1973,12 +1975,17 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertRegex(installed["skill_sha256"], r"^[0-9a-f]{64}$")
             paths = {item["target"]: Path(item["path"]) for item in installed["installed"]}
             shim = Path(installed["cli"]["shim_path"])
-            self.assertEqual(paths["codex"], fake_home / ".codex" / "skills" / "commons")
+            self.assertEqual(paths["codex"], fake_home / ".agents" / "skills" / "commons")
             self.assertEqual(paths["claude"], fake_home / ".claude" / "skills" / "commons")
             self.assertEqual(paths["cline"], fake_home / ".agents" / "skills" / "commons")
             self.assertTrue((paths["codex"] / "SKILL.md").exists())
             self.assertTrue((paths["claude"] / "SKILL.md").exists())
             self.assertTrue((paths["cline"] / "SKILL.md").exists())
+            cline_install = next(item for item in installed["installed"] if item["target"] == "cline")
+            cline_rule = Path(cline_install["rule_path"])
+            self.assertEqual(cline_rule, fake_home / ".cline" / "rules" / "commons-bootstrap.md")
+            self.assertTrue(cline_rule.exists())
+            self.assertIn("COMMONS_AGENT_RUNTIME=cline", cline_rule.read_text(encoding="utf-8"))
             installed_skill = (paths["codex"] / "SKILL.md").read_text(encoding="utf-8")
             self.assertIn("scope-first", installed_skill)
             self.assertIn("pipx install agent-commons==0.5.0", installed_skill)
@@ -1989,6 +1996,10 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertIn("contact_code", installed_skill)
             self.assertIn("Commons scope", installed_skill)
             self.assertIn("scope resolve", installed_skill)
+            self.assertLess(
+                installed_skill.index('scope resolve --workspace "$PWD"'),
+                installed_skill.index('if [ -z "${COMMONS_AGENT_RUNTIME:-}" ]'),
+            )
             self.assertIn("commons user set", installed_skill)
             self.assertIn("Never infer the human name", installed_skill)
             self.assertIn("remote msg broadcast", installed_skill)
@@ -2012,6 +2023,19 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertEqual(shim_doctor.returncode, 0, shim_doctor.stderr)
             shim_report = json.loads(shim_doctor.stdout)
             self.assertTrue(shim_report["cli"]["shim_exists"])
+            self.assertTrue(shim_report["skills"]["cline"]["rule"]["user_up_to_date"])
+
+            legacy_codex = fake_home / ".codex" / "skills" / "commons"
+            legacy_codex.mkdir(parents=True)
+            (legacy_codex / "SKILL.md").write_text(installed_skill, encoding="utf-8")
+            duplicate_report = json_stdout(
+                run_cli_raw(commons_home, "doctor", "--json", extra_env={"HOME": str(fake_home)})
+            )
+            self.assertEqual(
+                duplicate_report["skills"]["codex"]["duplicate_paths"],
+                [str(legacy_codex)],
+            )
+            self.assertTrue(any("active from multiple paths" in item for item in duplicate_report["warnings"]))
 
     def test_both_skill_target_remains_codex_and_claude_only(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -2129,13 +2153,17 @@ class CommonsCoreTests(unittest.TestCase):
                     "runtime",
                     "prepare",
                     "--agents",
-                    "codex,claude-code",
+                    "codex,cline",
                     "--project-dir",
                     str(project),
                 )
             )
             self.assertTrue(Path(prepared["prompt_paths"]["agent_a"]).exists())
             self.assertTrue(Path(prepared["prompt_paths"]["agent_b"]).exists())
+            self.assertIn(
+                "commons agent register --runtime cline",
+                Path(prepared["prompt_paths"]["agent_b"]).read_text(encoding="utf-8"),
+            )
 
             run_id = prepared["run_id"]
             resource = prepared["resource_id"]
@@ -2162,7 +2190,7 @@ class CommonsCoreTests(unittest.TestCase):
                     "agent",
                     "register",
                     "--runtime",
-                    "claude-code",
+                    "cline",
                     "--workspace",
                     str(project),
                     "--name",

@@ -118,20 +118,6 @@ Scope requirements:
 Recommended scope-first startup:
 
 ```bash
-if [ -z "${COMMONS_AGENT_RUNTIME:-}" ]; then
-  cat >&2 <<'EOF'
-Commons needs this session's runtime label before registration.
-
-Set COMMONS_AGENT_RUNTIME from the Agent host that is executing this Skill:
-- Codex: codex
-- Claude Code: claude-code
-- Cline: cline
-
-Do not infer the runtime from the project name or reuse another Agent's label.
-EOF
-  exit 5
-fi
-
 SCOPE_JSON="$("$COMMONS_BIN" scope resolve --workspace "$PWD" --json)"
 COMMONS_MODE="$(printf '%s' "$SCOPE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin)["mode"])')"
 
@@ -152,6 +138,20 @@ fi
 if [ "$COMMONS_MODE" = "disabled" ]; then
   echo "Commons scope: disabled"
   exit 0
+fi
+
+if [ -z "${COMMONS_AGENT_RUNTIME:-}" ]; then
+  cat >&2 <<'EOF'
+Commons needs this session's runtime label before registration.
+
+Set COMMONS_AGENT_RUNTIME from the Agent host that is executing this Skill:
+- Codex: codex
+- Claude Code: claude-code
+- Cline: cline
+
+Do not infer the runtime from the project name or reuse another Agent's label.
+EOF
+  exit 5
 fi
 
 COMMONS_USER_JSON="$("$COMMONS_BIN" user show --json)"

@@ -151,7 +151,7 @@ def build_parser() -> argparse.ArgumentParser:
     install_skill = sub.add_parser("install-skill")
     install_skill.add_argument(
         "--target",
-        choices=["codex", "claude", "cline", "both", "all"],
+        choices=[*service.SKILL_TARGETS, *service.SKILL_TARGET_GROUPS],
         default="all",
     )
     install_skill.add_argument("--scope", choices=["user", "project"], default="user")

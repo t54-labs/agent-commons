@@ -48,7 +48,7 @@ commons = "commons.cli:main"
 commonsd = "commons.daemon:main"
 
 [tool.setuptools]
-packages = ["commons", "commons.skill_template"]
+packages = ["commons", "commons.cline_template", "commons.skill_template"]
 
 [tool.setuptools.package-data]
-commons = ["skill_template/SKILL.md"]
+commons = ["cline_template/commons-bootstrap.md", "skill_template/SKILL.md"]
