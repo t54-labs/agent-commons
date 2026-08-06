@@ -168,13 +168,13 @@ def skill_install_path(target: str, scope: str, project: Path) -> Path:
         roots = {
             "codex": Path.home() / ".codex" / "skills",
             "claude": Path.home() / ".claude" / "skills",
-            "cline": Path.home() / ".cline" / "skills",
+            "cline": Path.home() / ".agents" / "skills",
         }
     else:
         roots = {
             "codex": project / ".agents" / "skills",
             "claude": project / ".claude" / "skills",
-            "cline": project / ".cline" / "skills",
+            "cline": project / ".agents" / "skills",
         }
     return roots[target] / "commons"
 

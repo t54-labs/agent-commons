@@ -1931,7 +1931,7 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertTrue((paths["cline"] / "SKILL.md").exists())
             self.assertEqual(paths["codex"], project / ".agents" / "skills" / "commons")
             self.assertEqual(paths["claude"], project / ".claude" / "skills" / "commons")
-            self.assertEqual(paths["cline"], project / ".cline" / "skills" / "commons")
+            self.assertEqual(paths["cline"], project / ".agents" / "skills" / "commons")
 
             report = json_stdout(run_cli_raw(home, "doctor", "--project-dir", str(project), "--json"))
             self.assertTrue(report["ok"])
@@ -1975,7 +1975,7 @@ class CommonsCoreTests(unittest.TestCase):
             shim = Path(installed["cli"]["shim_path"])
             self.assertEqual(paths["codex"], fake_home / ".codex" / "skills" / "commons")
             self.assertEqual(paths["claude"], fake_home / ".claude" / "skills" / "commons")
-            self.assertEqual(paths["cline"], fake_home / ".cline" / "skills" / "commons")
+            self.assertEqual(paths["cline"], fake_home / ".agents" / "skills" / "commons")
             self.assertTrue((paths["codex"] / "SKILL.md").exists())
             self.assertTrue((paths["claude"] / "SKILL.md").exists())
             self.assertTrue((paths["cline"] / "SKILL.md").exists())
