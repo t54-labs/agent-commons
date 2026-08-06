@@ -149,7 +149,11 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument("--project-dir")
 
     install_skill = sub.add_parser("install-skill")
-    install_skill.add_argument("--target", choices=["codex", "claude", "both"], default="both")
+    install_skill.add_argument(
+        "--target",
+        choices=["codex", "claude", "cline", "both", "all"],
+        default="all",
+    )
     install_skill.add_argument("--scope", choices=["user", "project"], default="user")
     install_skill.add_argument("--project-dir")
 

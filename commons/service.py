@@ -48,6 +48,12 @@ LEASE_COMPAT: dict[str, set[str]] = {
 }
 FENCED_LEASE_MODES = {"write", "exclusive", "maintenance"}
 
+SKILL_TARGETS = ("codex", "claude", "cline")
+SKILL_TARGET_GROUPS = {
+    "both": ("codex", "claude"),
+    "all": SKILL_TARGETS,
+}
+
 SECRET_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"sk-[A-Za-z0-9_-]{16,}"),
     re.compile(r"(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*([^\s'\";]+)"),
@@ -127,22 +133,36 @@ exit 127
     }
 
 
-def install_skill(target: str = "both", scope: str = "user", project_dir: str | None = None) -> dict[str, Any]:
+def skill_install_path(target: str, scope: str, project: Path) -> Path:
+    if target not in SKILL_TARGETS:
+        raise CommonsError(f"unknown skill target: {target}")
+    if scope not in {"user", "project"}:
+        raise CommonsError(f"unknown skill scope: {scope}")
+    if scope == "user":
+        roots = {
+            "codex": Path.home() / ".codex" / "skills",
+            "claude": Path.home() / ".claude" / "skills",
+            "cline": Path.home() / ".cline" / "skills",
+        }
+    else:
+        roots = {
+            "codex": project / ".agents" / "skills",
+            "claude": project / ".claude" / "skills",
+            "cline": project / ".cline" / "skills",
+        }
+    return roots[target] / "commons"
+
+
+def install_skill(target: str = "all", scope: str = "user", project_dir: str | None = None) -> dict[str, Any]:
     if scope not in {"user", "project"}:
         raise CommonsError(f"unknown skill scope: {scope}")
     shim = install_cli_shim()
     source = skill_source_dir()
     project = Path(project_dir or os.getcwd()).resolve()
     installs: list[dict[str, str]] = []
-    targets = ["codex", "claude"] if target == "both" else [target]
+    targets = SKILL_TARGET_GROUPS.get(target, (target,))
     for item in targets:
-        if item not in {"codex", "claude"}:
-            raise CommonsError(f"unknown skill target: {item}")
-        if item == "codex":
-            base = Path.home() / ".codex" / "skills" if scope == "user" else project / ".agents" / "skills"
-        else:
-            base = Path.home() / ".claude" / "skills" if scope == "user" else project / ".claude" / "skills"
-        dest = base / "commons"
+        dest = skill_install_path(item, scope, project)
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source, dest, dirs_exist_ok=True)
         installs.append({"target": item, "scope": scope, "path": str(dest)})
@@ -193,12 +213,8 @@ def doctor(fix: bool = False, project_dir: str | None = None) -> dict[str, Any]:
         return hashlib.sha256(skill_file.read_bytes()).hexdigest()
 
     def skill_paths(target: str) -> dict[str, Any]:
-        if target == "codex":
-            user_path = Path.home() / ".codex" / "skills" / "commons"
-            project_path = project / ".agents" / "skills" / "commons"
-        else:
-            user_path = Path.home() / ".claude" / "skills" / "commons"
-            project_path = project / ".claude" / "skills" / "commons"
+        user_path = skill_install_path(target, "user", project)
+        project_path = skill_install_path(target, "project", project)
         user_hash = installed_skill_hash(user_path)
         project_hash = installed_skill_hash(project_path)
         return {
@@ -218,6 +234,7 @@ def doctor(fix: bool = False, project_dir: str | None = None) -> dict[str, Any]:
         for name, path in {
             "codex": shutil.which("codex"),
             "claude": shutil.which("claude"),
+            "cline": shutil.which("cline"),
         }.items()
     }
     shim = cli_shim_path()
@@ -265,10 +282,9 @@ def doctor(fix: bool = False, project_dir: str | None = None) -> dict[str, Any]:
     skills = {
         "source": source,
         "source_sha256": expected_skill_hash,
-        "codex": skill_paths("codex"),
-        "claude": skill_paths("claude"),
+        **{runtime: skill_paths(runtime) for runtime in SKILL_TARGETS},
     }
-    for runtime in ("codex", "claude"):
+    for runtime in SKILL_TARGETS:
         check = skills[runtime]
         for install_scope in ("user", "project"):
             if check[f"{install_scope}_installed"] and not check[f"{install_scope}_up_to_date"]:

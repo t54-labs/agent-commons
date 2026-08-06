@@ -2,7 +2,7 @@
 set -euo pipefail
 
 source_ref="${COMMONS_INSTALL_SOURCE:-agent-commons==0.4.0}"
-target="both"
+target="all"
 scope="user"
 project_dir=""
 commons_home="${COMMONS_HOME:-$HOME/.commons}"
@@ -17,7 +17,7 @@ Usage:
 
 Options:
   --source <path-or-pip-ref>  Package source (default: agent-commons==0.4.0 from PyPI)
-  --target <both|codex|claude>
+  --target <all|both|codex|claude|cline>
   --scope <user|project>
   --project-dir <path>        Destination project for project-scoped Skills
   --commons-home <path>       Commons state and virtual environment root
@@ -72,9 +72,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$target" in
-  both|codex|claude) ;;
+  all|both|codex|claude|cline) ;;
   *)
-    echo "--target must be both, codex, or claude" >&2
+    echo "--target must be all, both, codex, claude, or cline" >&2
     exit 2
     ;;
 esac

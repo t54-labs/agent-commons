@@ -1914,7 +1914,7 @@ class CommonsCoreTests(unittest.TestCase):
                     home,
                     "install-skill",
                     "--target",
-                    "both",
+                    "all",
                     "--scope",
                     "project",
                     "--project-dir",
@@ -1928,8 +1928,10 @@ class CommonsCoreTests(unittest.TestCase):
             paths = {item["target"]: Path(item["path"]) for item in installed["installed"]}
             self.assertTrue((paths["codex"] / "SKILL.md").exists())
             self.assertTrue((paths["claude"] / "SKILL.md").exists())
+            self.assertTrue((paths["cline"] / "SKILL.md").exists())
             self.assertEqual(paths["codex"], project / ".agents" / "skills" / "commons")
             self.assertEqual(paths["claude"], project / ".claude" / "skills" / "commons")
+            self.assertEqual(paths["cline"], project / ".cline" / "skills" / "commons")
 
             report = json_stdout(run_cli_raw(home, "doctor", "--project-dir", str(project), "--json"))
             self.assertTrue(report["ok"])
@@ -1940,8 +1942,11 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertTrue(report["cli"]["shim_exists"])
             self.assertTrue(report["skills"]["codex"]["project_installed"])
             self.assertTrue(report["skills"]["claude"]["project_installed"])
+            self.assertTrue(report["skills"]["cline"]["project_installed"])
             self.assertTrue(report["skills"]["codex"]["project_up_to_date"])
             self.assertTrue(report["skills"]["claude"]["project_up_to_date"])
+            self.assertTrue(report["skills"]["cline"]["project_up_to_date"])
+            self.assertIn("cline", report["runtimes"])
 
             (paths["codex"] / "SKILL.md").write_text("outdated\n", encoding="utf-8")
             stale_report = json_stdout(run_cli_raw(home, "doctor", "--project-dir", str(project), "--json"))
@@ -1958,7 +1963,7 @@ class CommonsCoreTests(unittest.TestCase):
                     commons_home,
                     "install-skill",
                     "--target",
-                    "both",
+                    "all",
                     "--scope",
                     "user",
                     "--json",
@@ -1970,8 +1975,10 @@ class CommonsCoreTests(unittest.TestCase):
             shim = Path(installed["cli"]["shim_path"])
             self.assertEqual(paths["codex"], fake_home / ".codex" / "skills" / "commons")
             self.assertEqual(paths["claude"], fake_home / ".claude" / "skills" / "commons")
+            self.assertEqual(paths["cline"], fake_home / ".cline" / "skills" / "commons")
             self.assertTrue((paths["codex"] / "SKILL.md").exists())
             self.assertTrue((paths["claude"] / "SKILL.md").exists())
+            self.assertTrue((paths["cline"] / "SKILL.md").exists())
             installed_skill = (paths["codex"] / "SKILL.md").read_text(encoding="utf-8")
             self.assertIn("scope-first", installed_skill)
             self.assertIn("pipx install agent-commons==0.4.0", installed_skill)
@@ -2001,6 +2008,29 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertEqual(shim_doctor.returncode, 0, shim_doctor.stderr)
             shim_report = json.loads(shim_doctor.stdout)
             self.assertTrue(shim_report["cli"]["shim_exists"])
+
+    def test_both_skill_target_remains_codex_and_claude_only(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            commons_home = Path(td) / "commons-home"
+            project = Path(td) / "project"
+            project.mkdir()
+
+            installed = json_stdout(
+                run_cli_raw(
+                    commons_home,
+                    "install-skill",
+                    "--target",
+                    "both",
+                    "--scope",
+                    "project",
+                    "--project-dir",
+                    str(project),
+                    "--json",
+                )
+            )
+
+            self.assertEqual([item["target"] for item in installed["installed"]], ["codex", "claude"])
+            self.assertFalse((project / ".cline" / "skills" / "commons").exists())
 
     def test_cli_shim_stays_inside_virtual_environment(self) -> None:
         from commons import service
