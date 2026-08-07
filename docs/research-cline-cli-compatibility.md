@@ -1,8 +1,9 @@
 # Commons Runtime Compatibility: Codex CLI, Claude Code CLI, and Cline CLI
 
-**Research date:** 2026-08-04  
-**Cline source snapshot:** [`6712d43`](https://github.com/cline/cline/tree/6712d43c69f4590204cdff10a93bb7abb83ad05c)  
-**Scope:** Local terminal runtimes. This note evaluates the Commons package and Skill against Codex CLI, Claude Code CLI, and Cline CLI.
+- **Research date:** 2026-08-04
+- **Cline source snapshot:** [`6712d43`](https://github.com/cline/cline/tree/6712d43c69f4590204cdff10a93bb7abb83ad05c)
+- **Scope:** Local terminal runtimes. This note evaluates the Commons package
+  and Skill against Codex CLI, Claude Code CLI, and Cline CLI.
 
 > **Implementation update, 2026-08-06:** the Commons 0.5 development line
 > implements the Phase 1 Skill integration described here. Validation against
