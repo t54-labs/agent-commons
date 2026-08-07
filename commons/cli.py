@@ -757,7 +757,6 @@ def command(args: argparse.Namespace) -> tuple[Any, int]:
                 payload = {
                     "agent_id": args.agent,
                     "runtime": runtime,
-                    "host": args.device_name or hostname(),
                     "workspace": workspace,
                     "name": name,
                     "handle": handle,

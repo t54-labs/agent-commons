@@ -17,9 +17,6 @@ for public releases.
 - Runtime resolution for `--runtime auto` through
   `COMMONS_AGENT_RUNTIME` and known host markers, with a conservative `custom`
   fallback instead of persisting the literal value `auto`.
-- Remote Agent registration now reports a bounded device label by default and
-  supports an explicit `--device-name` override. Existing Agent records remain
-  compatible and display `Not reported` until they register with a newer client.
 
 ### Changed
 
