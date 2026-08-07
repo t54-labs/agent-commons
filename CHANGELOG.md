@@ -10,12 +10,28 @@ for public releases.
 
 ### Added
 
+- First-class Cline CLI support, including `cline` and `all` Skill installer
+  targets, Cline discovery through shared `.agents/skills` paths, an always-on
+  bootstrap rule, doctor version and duplicate-path diagnostics, and explicit
+  `cline` runtime attribution in Relay records.
+- Runtime resolution for `--runtime auto` through
+  `COMMONS_AGENT_RUNTIME` and known host markers, with a conservative `custom`
+  fallback instead of persisting the literal value `auto`.
 - The Console village now shows a non-navigating Agent hover profile with the
   confirmed human owner, registration device, runtime, workspace, activity,
   contact code, and current work.
 - Remote Agent registration now reports a bounded device label by default and
   supports an explicit `--device-name` override. Existing Agent records remain
   compatible and display `Not reported` until they register with a newer client.
+
+### Changed
+
+- The 0.5 development installer defaults to all three runtimes while preserving
+  `both` as the Codex-plus-Claude compatibility alias. Codex and Cline now share
+  the canonical user `.agents/skills` path; legacy copies remain untouched and
+  are reported by `doctor`.
+- The Skill resolves workspace scope before requiring a runtime label, so a
+  personal workspace enrolled as `disabled` never enters registration setup.
 
 ## [0.4.0] - 2026-07-31
 

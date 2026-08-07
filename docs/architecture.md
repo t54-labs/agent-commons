@@ -11,6 +11,7 @@ flowchart TB
     subgraph Runtimes["Agent runtimes"]
         Codex["Codex"]
         Claude["Claude Code"]
+        Cline["Cline"]
         Other["Other CLI agents"]
     end
 
@@ -36,6 +37,7 @@ flowchart TB
 
     Codex --> Skill
     Claude --> Skill
+    Cline --> Skill
     Other --> CLI
     Skill --> CLI
     CLI --> Scope

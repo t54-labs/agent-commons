@@ -150,7 +150,11 @@ def build_parser() -> argparse.ArgumentParser:
     doctor.add_argument("--project-dir")
 
     install_skill = sub.add_parser("install-skill")
-    install_skill.add_argument("--target", choices=["codex", "claude", "both"], default="both")
+    install_skill.add_argument(
+        "--target",
+        choices=[*service.SKILL_TARGETS, *service.SKILL_TARGET_GROUPS],
+        default="all",
+    )
     install_skill.add_argument("--scope", choices=["user", "project"], default="user")
     install_skill.add_argument("--project-dir")
 
@@ -743,10 +747,11 @@ def command(args: argparse.Namespace) -> tuple[Any, int]:
                 project = remote.project_arg(args.remote, args.project)
                 workspace, workspace_redacted = remote_workspace_arg(args.workspace, args.share_workspace_path)
                 profile = identity.require_profile()
+                runtime = service.resolve_runtime(args.runtime)
                 default_label = "-".join(
                     part
                     for part in (
-                        args.runtime,
+                        runtime,
                         Path(workspace).name if workspace else None,
                         args.agent[-8:] if args.agent else None,
                     )
@@ -756,7 +761,7 @@ def command(args: argparse.Namespace) -> tuple[Any, int]:
                 name = identity.qualify_name(profile, args.name or handle)
                 payload = {
                     "agent_id": args.agent,
-                    "runtime": args.runtime,
+                    "runtime": runtime,
                     "host": args.device_name or hostname(),
                     "workspace": workspace,
                     "name": name,
@@ -902,9 +907,10 @@ def command(args: argparse.Namespace) -> tuple[Any, int]:
     if args.cmd == "agent":
         if args.agent_cmd == "register":
             profile = identity.require_profile()
+            runtime = service.resolve_runtime(args.runtime)
             workspace_label = Path(args.workspace).name if args.workspace else Path.cwd().name
-            qualified_name = identity.qualify_name(profile, args.name or f"{args.runtime}-{workspace_label}")
-            result = service.register_agent(args.runtime, args.workspace, qualified_name, args.task, args.runtime_version)
+            qualified_name = identity.qualify_name(profile, args.name or f"{runtime}-{workspace_label}")
+            result = service.register_agent(runtime, args.workspace, qualified_name, args.task, args.runtime_version)
             result.update({"name": qualified_name, "user_name": profile["name"], "user_slug": profile["slug"]})
             return result, 0
         if args.agent_cmd == "heartbeat":

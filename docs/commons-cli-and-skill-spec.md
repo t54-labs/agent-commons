@@ -334,16 +334,19 @@ commons watch --once
 ### `commons install-skill`
 
 ```bash
-commons install-skill --target both --scope user
+commons install-skill --target all --scope user
 commons install-skill --target codex --scope project --project-dir "$PWD"
 commons install-skill --target claude --scope project --project-dir "$PWD"
+commons install-skill --target cline --scope project --project-dir "$PWD"
 ```
 
 Targets:
 
 - `codex`
 - `claude`
-- `both`
+- `cline`
+- `both`: compatibility alias for Codex and Claude Code
+- `all`: Codex, Claude Code, and Cline; this is the default
 
 Scopes:
 
@@ -353,11 +356,32 @@ Scopes:
 Install paths:
 
 ```text
-Codex user scope:   ~/.codex/skills/commons
+Codex user scope:   ~/.agents/skills/commons
 Codex project scope: <project>/.agents/skills/commons
 Claude user scope:  ~/.claude/skills/commons
 Claude project scope: <project>/.claude/skills/commons
+Cline user scope:   ~/.agents/skills/commons
+Cline project scope: <project>/.agents/skills/commons
 ```
+
+Cline and Codex intentionally share the canonical `.agents/skills` location at
+both user and project scope. Installing `all` may therefore copy the same Skill
+to that destination twice, but both target reports remain explicit and the
+resulting file is identical. `doctor` reports active legacy copies under
+`~/.codex/skills` or Cline-specific Skill paths so users can remove them only
+after verifying the canonical installation.
+
+Cline installation also writes a uniquely named bootstrap rule:
+
+```text
+Cline user rule:    ~/.cline/rules/commons-bootstrap.md
+Cline project rule: <project>/.clinerules/commons-bootstrap.md
+```
+
+The rule identifies the runtime as `cline`, points Cline-launched commands at
+the stable shim, and requires scope resolution before any registration or
+shared side effect. It does not install hooks or keep a background process
+alive.
 
 `install-skill` also creates or refreshes the stable local CLI shim:
 
@@ -367,7 +391,7 @@ Claude project scope: <project>/.claude/skills/commons
 
 The installed Skill prefers the `commons` executable already present in `PATH`
 and uses the stable shim as a fallback. It rejects CLI versions older than
-0.4.0. Agents must not search the filesystem for `commons/cli.py`, invoke source
+0.5.0. Agents must not search the filesystem for `commons/cli.py`, invoke source
 files directly, install packages without user approval, or write Board files
 directly. The Skill does not require MCP.
 
@@ -676,14 +700,16 @@ The Skill should be distributed as:
 .claude/skills/commons/SKILL.md
 ```
 
-The same source is copied into Codex and Claude Code skill directories. The skill assumes `commons` CLI plus the filesystem board; it must not assume an MCP server exists.
+The same source is copied into Codex, Claude Code, and Cline Skill directories.
+The Skill assumes the `commons` CLI plus the filesystem board; it must not
+assume an MCP server exists.
 
 ### Skill Frontmatter
 
 ```markdown
 ---
 name: commons
-description: Coordinate with other local coding agents through Commons before starting shared work, changing plans, touching shared resources, deploying, migrating databases, using browser profiles, or requesting help from another agent.
+description: Coordinate Codex, Claude Code, Cline, and other coding agents through Commons before starting shared work, changing plans, touching shared resources, deploying, migrating databases, using browser profiles, or requesting help from another agent.
 ---
 ```
 
@@ -712,10 +738,15 @@ If `scope resolve` returns `unknown`, ask the user to choose. If it returns `rem
 
 ```bash
 commons remote status --remote "$COMMONS_REMOTE" --project "$COMMONS_PROJECT"
-commons remote agent register --remote "$COMMONS_REMOTE" --project "$COMMONS_PROJECT" --agent "$AGENT_ID" --runtime auto --workspace "$(basename "$PWD")" --handle "$COMMONS_HANDLE" --contact-code "$COMMONS_CONTACT_CODE"
+commons remote agent register --remote "$COMMONS_REMOTE" --project "$COMMONS_PROJECT" --agent "$AGENT_ID" --runtime "$COMMONS_AGENT_RUNTIME" --workspace "$(basename "$PWD")" --handle "$COMMONS_HANDLE" --contact-code "$COMMONS_CONTACT_CODE"
 commons remote inbox --remote "$COMMONS_REMOTE" --project "$COMMONS_PROJECT" --agent "$AGENT_ID" --unread-only
 commons remote lease list --remote "$COMMONS_REMOTE" --project "$COMMONS_PROJECT" --active
 ```
+
+The runtime host sets `COMMONS_AGENT_RUNTIME` to `codex`, `claude-code`, or
+`cline` before registration. `--runtime auto` remains a compatibility input for
+custom wrappers, but the CLI resolves it from explicit runtime configuration or
+known host markers and never persists the literal value `auto`.
 
 ### Before High-Risk Actions
 
