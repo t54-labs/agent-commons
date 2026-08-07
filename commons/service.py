@@ -407,6 +407,11 @@ def doctor(fix: bool = False, project_dir: str | None = None) -> dict[str, Any]:
             rule_hash and expected_rule_hash and rule_hash == expected_rule_hash
         )
     skills["cline"]["rule"] = cline_rules
+    cline_support_configured = bool(
+        cline_path
+        or any(cline_rules[f"{install_scope}_installed"] for install_scope in ("user", "project"))
+        or any(item["installed"] for item in skills["cline"]["alternate_paths"])
+    )
     for runtime in SKILL_TARGETS:
         check = skills[runtime]
         for install_scope in ("user", "project"):
@@ -421,7 +426,7 @@ def doctor(fix: bool = False, project_dir: str | None = None) -> dict[str, Any]:
                 f"{', '.join(check['duplicate_paths'])}; remove the legacy copy after verifying the canonical installation"
             )
     for install_scope in ("user", "project"):
-        if skills["cline"][f"{install_scope}_installed"]:
+        if cline_support_configured and skills["cline"][f"{install_scope}_installed"]:
             rule_check = cline_rules[f"{install_scope}_installed"]
             rule_current = cline_rules[f"{install_scope}_up_to_date"]
             if not rule_check:

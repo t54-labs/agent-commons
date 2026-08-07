@@ -2064,6 +2064,43 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertEqual([item["target"] for item in installed["installed"]], ["codex", "claude"])
             self.assertFalse((project / ".cline" / "skills" / "commons").exists())
 
+    def test_codex_only_install_does_not_require_cline_rule_without_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            commons_home = Path(td) / "commons-home"
+            fake_home = Path(td) / "user-home"
+            project = Path(td) / "project"
+            project.mkdir()
+            extra_env = {"HOME": str(fake_home), "PATH": ""}
+
+            run_cli_raw(
+                commons_home,
+                "install-skill",
+                "--target",
+                "codex",
+                "--scope",
+                "user",
+                "--json",
+                extra_env=extra_env,
+            )
+            report = json_stdout(
+                run_cli_raw(
+                    commons_home,
+                    "doctor",
+                    "--project-dir",
+                    str(project),
+                    "--json",
+                    extra_env=extra_env,
+                )
+            )
+
+            self.assertTrue(report["skills"]["codex"]["user_installed"])
+            self.assertTrue(report["skills"]["cline"]["user_installed"])
+            self.assertFalse(report["runtimes"]["cline"]["available"])
+            self.assertFalse(
+                any("Cline bootstrap rule" in warning for warning in report["warnings"]),
+                report["warnings"],
+            )
+
     def test_runtime_resolution_supports_cline_and_never_persists_auto(self) -> None:
         from commons import service
 
