@@ -187,6 +187,7 @@ class CommonsCoreTests(unittest.TestCase):
                     "handle": "sergio-codex-review",
                     "name": "reviewer",
                     "user_name": "Sergio",
+                    "host": "sergio-mac-studio",
                 },
                 relay_db,
             )
@@ -194,6 +195,7 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertEqual(registered["name"], "Sergio-reviewer")
             self.assertEqual(registered["user_name"], "Sergio")
             self.assertEqual(registered["user_slug"], "sergio")
+            self.assertEqual(registered["host"], "sergio-mac-studio")
 
             refreshed = relay.register_agent(
                 {
@@ -206,6 +208,7 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertEqual(refreshed["handle"], "sergio-codex-review")
             self.assertEqual(refreshed["name"], "Sergio-reviewer")
             self.assertEqual(refreshed["user_name"], "Sergio")
+            self.assertEqual(refreshed["host"], "sergio-mac-studio")
 
             with self.assertRaises(relay.RelayError) as invalid_user_name:
                 relay.register_agent(
@@ -313,6 +316,7 @@ class CommonsCoreTests(unittest.TestCase):
                 columns = {row["name"] for row in conn.execute("PRAGMA table_info(agents)")}
             self.assertIn("user_name", columns)
             self.assertIn("user_slug", columns)
+            self.assertIn("host", columns)
 
             refreshed = relay.register_agent(
                 {"project_id": "legacy", "agent_id": "legacy_agent", "runtime": "codex"},
@@ -2539,6 +2543,8 @@ class CommonsCoreTests(unittest.TestCase):
                         "codex-a",
                         "--workspace",
                         "/private/work/secret-repo",
+                        "--device-name",
+                        "test-mac-studio",
                         extra_env=extra_env,
                     )
                 )
@@ -2586,6 +2592,7 @@ class CommonsCoreTests(unittest.TestCase):
                 self.assertEqual(agent_c["runtime"], "cline")
                 self.assertEqual(agent_a["contact_code"], "C7DX92")
                 self.assertEqual(agent_a["workspace"], "secret-repo")
+                self.assertEqual(agent_a["host"], "test-mac-studio")
                 self.assertTrue(agent_a["workspace_path_redacted"])
                 self.assertRegex(agent_b["contact_code"], r"^[2-9A-Z]{6}$")
 

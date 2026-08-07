@@ -91,6 +91,7 @@ def seed() -> None:
             "contact_code": "CX7A21",
             "name": "Console Builder",
             "workspace": "commons",
+            "host": "sergio-mac-studio",
         },
         {
             "project_id": "commons-team",
@@ -100,6 +101,7 @@ def seed() -> None:
             "contact_code": "CL8B42",
             "name": "Relay Engineer",
             "workspace": "commons",
+            "host": "sergio-macbook-pro",
         },
         {
             "project_id": "commons-team",
@@ -109,6 +111,7 @@ def seed() -> None:
             "contact_code": "CR5D72",
             "name": "Release Reviewer",
             "workspace": "commons",
+            "host": "sergio-mac-studio",
         },
         {
             "project_id": "commons-team",
@@ -118,6 +121,7 @@ def seed() -> None:
             "contact_code": "CD9F31",
             "name": "Docs Agent",
             "workspace": "commons-docs",
+            "host": "docs-runner",
         },
         {
             "project_id": "platform-api",
@@ -127,6 +131,7 @@ def seed() -> None:
             "contact_code": "XR7P22",
             "name": "Platform Integrator",
             "workspace": "platform-api",
+            "host": "staging-workstation",
         },
     ]
     agents.extend(

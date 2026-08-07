@@ -1943,6 +1943,165 @@ img {
   transform: translateX(-50%);
 }
 
+.village-agent-ui__hitbox {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 0;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: auto !important;
+}
+
+.village-agent-ui__hitbox:focus-visible {
+  border-color: #ffe276;
+  box-shadow: 0 0 0 2px rgba(16, 47, 48, 0.82);
+  outline: 0;
+  opacity: 1;
+}
+
+.village-agent-ui__profile {
+  --profile-x: -50%;
+  --profile-y: -100%;
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  padding: 9px 10px 10px;
+  color: #e9f4e9;
+  font-size: var(--profile-font-size);
+  line-height: 1.25;
+  background: rgba(10, 43, 43, 0.98);
+  border: 1px solid #ffe276;
+  box-shadow: 4px 4px 0 rgba(8, 31, 32, 0.58);
+  opacity: 0;
+  transform: translate(var(--profile-x), var(--profile-y)) translateY(4px);
+  transition: opacity 90ms steps(2, end), transform 90ms steps(2, end), visibility 0s linear 90ms;
+  visibility: hidden;
+}
+
+.village-agent-ui__profile--below {
+  --profile-y: 0;
+  transform: translate(var(--profile-x), var(--profile-y)) translateY(-4px);
+}
+
+.village-agent-ui__profile--left { --profile-x: 0; }
+.village-agent-ui__profile--right { --profile-x: -100%; }
+
+.village-agent-ui__profile--visible {
+  opacity: 1;
+  transform: translate(var(--profile-x), var(--profile-y)) translateY(0);
+  transition-delay: 0s;
+  visibility: visible;
+}
+
+.village-agent-ui__profile::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #68d9b8 0 34%, #ffe276 34% 68%, #7fb8e4 68% 100%);
+  content: "";
+}
+
+.village-agent-ui__profile-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0 7px;
+  border-bottom: 1px solid rgba(158, 200, 186, 0.28);
+}
+
+.village-agent-ui__profile-header > div {
+  min-width: 0;
+}
+
+.village-agent-ui__profile-header strong,
+.village-agent-ui__profile-work strong {
+  display: block;
+  overflow: hidden;
+  color: #fff8da;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.village-agent-ui__profile-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  color: #9fe0c8;
+  font-size: 0.9em;
+}
+
+.village-agent-ui__profile-state::before {
+  width: 5px;
+  height: 5px;
+  background: #68d9b8;
+  content: "";
+}
+
+.village-agent-ui__profile-state--working::before { background: #ffd75f; }
+.village-agent-ui__profile-state--blocked::before { background: #ff7b70; }
+.village-agent-ui__profile-state--offline::before { background: #789b91; }
+
+.village-agent-ui__profile-contact {
+  flex: 0 0 auto;
+  padding: 2px 4px;
+  color: #ffe276;
+  font-size: 0.85em;
+  border: 1px solid rgba(255, 226, 118, 0.42);
+}
+
+.village-agent-ui__profile-details {
+  display: grid;
+  gap: 4px;
+  margin: 7px 0 0;
+}
+
+.village-agent-ui__profile-details > div {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr);
+  gap: 7px;
+}
+
+.village-agent-ui__profile-details dt {
+  color: #8eb7aa;
+}
+
+.village-agent-ui__profile-details dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #e9f4e9;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.village-agent-ui__profile-work {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(158, 200, 186, 0.28);
+}
+
+.village-agent-ui__profile-work span {
+  display: block;
+  margin-bottom: 3px;
+  color: #8eb7aa;
+  font-size: 0.86em;
+  text-transform: uppercase;
+}
+
+.village-agent-ui--hovered .village-agent-ui__bubble {
+  opacity: 0 !important;
+}
+
 .village-agent-ui__status {
   position: absolute;
   color: #e9f7e8;
@@ -2025,8 +2184,15 @@ img {
   }
 
   .village-agent-ui__name,
-  .village-agent-ui__bubble {
+  .village-agent-ui__bubble,
+  .village-agent-ui__profile {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .village-agent-ui__profile {
+    transition: none;
   }
 }
 

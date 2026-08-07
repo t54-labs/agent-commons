@@ -17,6 +17,7 @@ from . import service
 from . import daemon_control
 from . import identity
 from . import remote
+from .util import hostname
 
 
 REMOTE_TASK_STATUSES = [
@@ -233,6 +234,10 @@ def build_parser() -> argparse.ArgumentParser:
     remote_agent_register.add_argument("--runtime", default="custom")
     remote_agent_register.add_argument("--workspace")
     remote_agent_register.add_argument("--share-workspace-path", action="store_true")
+    remote_agent_register.add_argument(
+        "--device-name",
+        help="Device label shown in the private Console (defaults to the local hostname)",
+    )
     remote_agent_register.add_argument("--name")
     remote_agent_register.add_argument("--handle")
     remote_agent_register.add_argument("--contact-code")
@@ -757,6 +762,7 @@ def command(args: argparse.Namespace) -> tuple[Any, int]:
                 payload = {
                     "agent_id": args.agent,
                     "runtime": runtime,
+                    "host": args.device_name or hostname(),
                     "workspace": workspace,
                     "name": name,
                     "handle": handle,
