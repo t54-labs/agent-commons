@@ -187,6 +187,7 @@ class CommonsCoreTests(unittest.TestCase):
                     "handle": "sergio-codex-review",
                     "name": "reviewer",
                     "user_name": "Sergio",
+                    "host": "sergio-mac-studio",
                 },
                 relay_db,
             )
@@ -194,6 +195,7 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertEqual(registered["name"], "Sergio-reviewer")
             self.assertEqual(registered["user_name"], "Sergio")
             self.assertEqual(registered["user_slug"], "sergio")
+            self.assertEqual(registered["host"], "sergio-mac-studio")
 
             refreshed = relay.register_agent(
                 {
@@ -206,6 +208,7 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertEqual(refreshed["handle"], "sergio-codex-review")
             self.assertEqual(refreshed["name"], "Sergio-reviewer")
             self.assertEqual(refreshed["user_name"], "Sergio")
+            self.assertEqual(refreshed["host"], "sergio-mac-studio")
 
             with self.assertRaises(relay.RelayError) as invalid_user_name:
                 relay.register_agent(
@@ -313,6 +316,7 @@ class CommonsCoreTests(unittest.TestCase):
                 columns = {row["name"] for row in conn.execute("PRAGMA table_info(agents)")}
             self.assertIn("user_name", columns)
             self.assertIn("user_slug", columns)
+            self.assertIn("host", columns)
 
             refreshed = relay.register_agent(
                 {"project_id": "legacy", "agent_id": "legacy_agent", "runtime": "codex"},
@@ -1914,7 +1918,7 @@ class CommonsCoreTests(unittest.TestCase):
                     home,
                     "install-skill",
                     "--target",
-                    "both",
+                    "all",
                     "--scope",
                     "project",
                     "--project-dir",
@@ -1928,8 +1932,10 @@ class CommonsCoreTests(unittest.TestCase):
             paths = {item["target"]: Path(item["path"]) for item in installed["installed"]}
             self.assertTrue((paths["codex"] / "SKILL.md").exists())
             self.assertTrue((paths["claude"] / "SKILL.md").exists())
+            self.assertTrue((paths["cline"] / "SKILL.md").exists())
             self.assertEqual(paths["codex"], project / ".agents" / "skills" / "commons")
             self.assertEqual(paths["claude"], project / ".claude" / "skills" / "commons")
+            self.assertEqual(paths["cline"], project / ".agents" / "skills" / "commons")
 
             report = json_stdout(run_cli_raw(home, "doctor", "--project-dir", str(project), "--json"))
             self.assertTrue(report["ok"])
@@ -1940,8 +1946,13 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertTrue(report["cli"]["shim_exists"])
             self.assertTrue(report["skills"]["codex"]["project_installed"])
             self.assertTrue(report["skills"]["claude"]["project_installed"])
+            self.assertTrue(report["skills"]["cline"]["project_installed"])
             self.assertTrue(report["skills"]["codex"]["project_up_to_date"])
             self.assertTrue(report["skills"]["claude"]["project_up_to_date"])
+            self.assertTrue(report["skills"]["cline"]["project_up_to_date"])
+            self.assertTrue(report["skills"]["cline"]["rule"]["project_installed"])
+            self.assertTrue(report["skills"]["cline"]["rule"]["project_up_to_date"])
+            self.assertIn("cline", report["runtimes"])
 
             (paths["codex"] / "SKILL.md").write_text("outdated\n", encoding="utf-8")
             stale_report = json_stdout(run_cli_raw(home, "doctor", "--project-dir", str(project), "--json"))
@@ -1958,7 +1969,7 @@ class CommonsCoreTests(unittest.TestCase):
                     commons_home,
                     "install-skill",
                     "--target",
-                    "both",
+                    "all",
                     "--scope",
                     "user",
                     "--json",
@@ -1968,20 +1979,35 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertRegex(installed["skill_sha256"], r"^[0-9a-f]{64}$")
             paths = {item["target"]: Path(item["path"]) for item in installed["installed"]}
             shim = Path(installed["cli"]["shim_path"])
-            self.assertEqual(paths["codex"], fake_home / ".codex" / "skills" / "commons")
+            self.assertEqual(paths["codex"], fake_home / ".agents" / "skills" / "commons")
             self.assertEqual(paths["claude"], fake_home / ".claude" / "skills" / "commons")
+            self.assertEqual(paths["cline"], fake_home / ".agents" / "skills" / "commons")
             self.assertTrue((paths["codex"] / "SKILL.md").exists())
             self.assertTrue((paths["claude"] / "SKILL.md").exists())
+            self.assertTrue((paths["cline"] / "SKILL.md").exists())
+            cline_install = next(item for item in installed["installed"] if item["target"] == "cline")
+            cline_rule = Path(cline_install["rule_path"])
+            self.assertEqual(cline_rule, fake_home / ".cline" / "rules" / "commons-bootstrap.md")
+            self.assertTrue(cline_rule.exists())
+            self.assertIn("COMMONS_AGENT_RUNTIME=cline", cline_rule.read_text(encoding="utf-8"))
             installed_skill = (paths["codex"] / "SKILL.md").read_text(encoding="utf-8")
             self.assertIn("scope-first", installed_skill)
-            self.assertIn("pipx install agent-commons==0.4.0", installed_skill)
-            self.assertIn("Commons 0.4.0 or newer is required", installed_skill)
+            self.assertIn("pipx install agent-commons==0.5.0", installed_skill)
+            self.assertIn("commons install-skill --target all --scope user", installed_skill)
+            self.assertIn("Commons 0.5.0 or newer is required", installed_skill)
+            self.assertIn("Cline", installed_skill)
+            self.assertIn("COMMONS_AGENT_RUNTIME", installed_skill)
             self.assertIn("contact_code", installed_skill)
             self.assertIn("Commons scope", installed_skill)
             self.assertIn("scope resolve", installed_skill)
+            self.assertLess(
+                installed_skill.index('scope resolve --workspace "$PWD"'),
+                installed_skill.index('if [ -z "${COMMONS_AGENT_RUNTIME:-}" ]'),
+            )
             self.assertIn("commons user set", installed_skill)
             self.assertIn("Never infer the human name", installed_skill)
             self.assertIn("remote msg broadcast", installed_skill)
+            self.assertNotIn("--runtime auto", installed_skill)
             self.assertNotIn("python3 -m commons.cli doctor --fix", installed_skill)
             self.assertFalse((commons_home / "board").exists())
             self.assertTrue(shim.exists())
@@ -2001,6 +2027,93 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertEqual(shim_doctor.returncode, 0, shim_doctor.stderr)
             shim_report = json.loads(shim_doctor.stdout)
             self.assertTrue(shim_report["cli"]["shim_exists"])
+            self.assertTrue(shim_report["skills"]["cline"]["rule"]["user_up_to_date"])
+
+            legacy_codex = fake_home / ".codex" / "skills" / "commons"
+            legacy_codex.mkdir(parents=True)
+            (legacy_codex / "SKILL.md").write_text(installed_skill, encoding="utf-8")
+            duplicate_report = json_stdout(
+                run_cli_raw(commons_home, "doctor", "--json", extra_env={"HOME": str(fake_home)})
+            )
+            self.assertEqual(
+                duplicate_report["skills"]["codex"]["duplicate_paths"],
+                [str(legacy_codex)],
+            )
+            self.assertTrue(any("active from multiple paths" in item for item in duplicate_report["warnings"]))
+
+    def test_both_skill_target_remains_codex_and_claude_only(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            commons_home = Path(td) / "commons-home"
+            project = Path(td) / "project"
+            project.mkdir()
+
+            installed = json_stdout(
+                run_cli_raw(
+                    commons_home,
+                    "install-skill",
+                    "--target",
+                    "both",
+                    "--scope",
+                    "project",
+                    "--project-dir",
+                    str(project),
+                    "--json",
+                )
+            )
+
+            self.assertEqual([item["target"] for item in installed["installed"]], ["codex", "claude"])
+            self.assertFalse((project / ".cline" / "skills" / "commons").exists())
+
+    def test_codex_only_install_does_not_require_cline_rule_without_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            commons_home = Path(td) / "commons-home"
+            fake_home = Path(td) / "user-home"
+            project = Path(td) / "project"
+            project.mkdir()
+            extra_env = {"HOME": str(fake_home), "PATH": ""}
+
+            run_cli_raw(
+                commons_home,
+                "install-skill",
+                "--target",
+                "codex",
+                "--scope",
+                "user",
+                "--json",
+                extra_env=extra_env,
+            )
+            report = json_stdout(
+                run_cli_raw(
+                    commons_home,
+                    "doctor",
+                    "--project-dir",
+                    str(project),
+                    "--json",
+                    extra_env=extra_env,
+                )
+            )
+
+            self.assertTrue(report["skills"]["codex"]["user_installed"])
+            self.assertTrue(report["skills"]["cline"]["user_installed"])
+            self.assertFalse(report["runtimes"]["cline"]["available"])
+            self.assertFalse(
+                any("Cline bootstrap rule" in warning for warning in report["warnings"]),
+                report["warnings"],
+            )
+
+    def test_runtime_resolution_supports_cline_and_never_persists_auto(self) -> None:
+        from commons import service
+
+        self.assertEqual(service.resolve_runtime("cline-cli"), "cline")
+        self.assertEqual(service.resolve_runtime("claude"), "claude-code")
+        self.assertEqual(service.resolve_runtime("codex-cli"), "codex")
+
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(service.resolve_runtime("auto"), "custom")
+        with mock.patch.dict(os.environ, {"COMMONS_AGENT_RUNTIME": "cline"}, clear=True):
+            self.assertEqual(service.resolve_runtime("auto"), "cline")
+        with mock.patch.dict(os.environ, {"CLINE_SESSION_ID": "session-test"}, clear=True):
+            self.assertEqual(service.resolve_runtime("auto"), "cline")
 
     def test_cli_shim_stays_inside_virtual_environment(self) -> None:
         from commons import service
@@ -2068,6 +2181,7 @@ class CommonsCoreTests(unittest.TestCase):
             self.assertIn(f"<{ROOT.resolve()}>", calls[0])
             self.assertTrue(calls[1].startswith(f"PWD={commons_home.resolve()}|"))
             self.assertIn("<-I><-m><commons.cli><install-skill>", calls[1])
+            self.assertIn("<--target><both>", calls[1])
 
     def test_runtime_smoke_prepare_and_verify(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -2081,13 +2195,17 @@ class CommonsCoreTests(unittest.TestCase):
                     "runtime",
                     "prepare",
                     "--agents",
-                    "codex,claude-code",
+                    "codex,cline",
                     "--project-dir",
                     str(project),
                 )
             )
             self.assertTrue(Path(prepared["prompt_paths"]["agent_a"]).exists())
             self.assertTrue(Path(prepared["prompt_paths"]["agent_b"]).exists())
+            self.assertIn(
+                "commons agent register --runtime cline",
+                Path(prepared["prompt_paths"]["agent_b"]).read_text(encoding="utf-8"),
+            )
 
             run_id = prepared["run_id"]
             resource = prepared["resource_id"]
@@ -2114,7 +2232,7 @@ class CommonsCoreTests(unittest.TestCase):
                     "agent",
                     "register",
                     "--runtime",
-                    "claude-code",
+                    "cline",
                     "--workspace",
                     str(project),
                     "--name",
@@ -2462,6 +2580,8 @@ class CommonsCoreTests(unittest.TestCase):
                         "codex-a",
                         "--workspace",
                         "/private/work/secret-repo",
+                        "--device-name",
+                        "test-mac-studio",
                         extra_env=extra_env,
                     )
                 )
@@ -2482,12 +2602,34 @@ class CommonsCoreTests(unittest.TestCase):
                         extra_env=extra_env,
                     )
                 )
+                cline_env = {**extra_env, "COMMONS_AGENT_RUNTIME": "cline"}
+                agent_c = json_stdout(
+                    run_cli(
+                        home,
+                        "remote",
+                        "agent",
+                        "register",
+                        "--agent",
+                        "agent_c",
+                        "--runtime",
+                        "auto",
+                        "--handle",
+                        "cline-gamma",
+                        "--name",
+                        "cline-c",
+                        extra_env=cline_env,
+                    )
+                )
                 self.assertEqual(agent_a["agent_id"], "agent_a")
                 self.assertEqual(agent_b["agent_id"], "agent_b")
+                self.assertEqual(agent_c["agent_id"], "agent_c")
                 self.assertEqual(agent_a["handle"], "test-user-codex-alpha")
                 self.assertEqual(agent_b["handle"], "test-user-claude-beta")
+                self.assertEqual(agent_c["handle"], "test-user-cline-gamma")
+                self.assertEqual(agent_c["runtime"], "cline")
                 self.assertEqual(agent_a["contact_code"], "C7DX92")
                 self.assertEqual(agent_a["workspace"], "secret-repo")
+                self.assertEqual(agent_a["host"], "test-mac-studio")
                 self.assertTrue(agent_a["workspace_path_redacted"])
                 self.assertRegex(agent_b["contact_code"], r"^[2-9A-Z]{6}$")
 
@@ -2542,7 +2684,10 @@ class CommonsCoreTests(unittest.TestCase):
                 self.assertEqual(file_remote_agent["agent_id"], "agent_file")
 
                 agents = json_stdout(run_cli(home, "remote", "agent", "list", extra_env=extra_env))
-                self.assertEqual({item["agent_id"] for item in agents}, {"agent_a", "agent_b", "agent_file", "agent_header"})
+                self.assertEqual(
+                    {item["agent_id"] for item in agents},
+                    {"agent_a", "agent_b", "agent_c", "agent_file", "agent_header"},
+                )
                 self.assertTrue(all(item["presence"] == "online" for item in agents))
                 heartbeat = json_stdout(
                     run_cli(
@@ -2951,7 +3096,7 @@ class CommonsCoreTests(unittest.TestCase):
                 self.assertEqual(village["workspace"]["name"], "Test Workspace")
                 self.assertEqual(village["agent_limit_per_project"], 12)
                 demo_village = next(item for item in village["projects"] if item["project"]["project_id"] == "demo")
-                self.assertEqual(demo_village["project"]["agent_count"], 4)
+                self.assertEqual(demo_village["project"]["agent_count"], 5)
                 self.assertTrue(demo_village["agents"])
                 self.assertTrue(all(agent["presence"] != "offline" for agent in demo_village["agents"]))
                 self.assertLessEqual(len(demo_village["agents"]), village["agent_limit_per_project"])
@@ -2961,7 +3106,7 @@ class CommonsCoreTests(unittest.TestCase):
                 with local_urlopen(project_request, timeout=1) as response:
                     project_console = json.loads(response.read().decode("utf-8"))
                 self.assertEqual(project_console["project"]["project_id"], "demo")
-                self.assertGreaterEqual(len(project_console["agents"]), 4)
+                self.assertGreaterEqual(len(project_console["agents"]), 5)
                 self.assertEqual(project_console["tasks"][0]["task_id"], task["task_id"])
                 self.assertTrue(any(message["message_id"] == msg["message_id"] for message in project_console["messages"]))
                 self.assertTrue(all(message["recipient_agent_id"] is None for message in project_console["broadcasts"]))
@@ -2987,15 +3132,15 @@ class CommonsCoreTests(unittest.TestCase):
                 self.assertNotIn("leases", project_summary)
 
                 agents_request = urllib.request.Request(
-                    f"{url}/v1/console/projects/demo/agents?limit=2&filter=all",
+                    f"{url}/v1/console/projects/demo/agents?limit=3&filter=all",
                     headers=console_headers,
                 )
                 with local_urlopen(agents_request, timeout=1) as response:
                     first_agents_page = json.loads(response.read().decode("utf-8"))
-                self.assertEqual(len(first_agents_page["agents"]), 2)
+                self.assertEqual(len(first_agents_page["agents"]), 3)
                 self.assertTrue(first_agents_page["page"]["has_more"])
                 agent_cursor = first_agents_page["page"]["next_cursor"]
-                next_agent_query = urllib.parse.urlencode({"limit": 2, "filter": "all", "cursor": agent_cursor})
+                next_agent_query = urllib.parse.urlencode({"limit": 3, "filter": "all", "cursor": agent_cursor})
                 next_agents_request = urllib.request.Request(
                     f"{url}/v1/console/projects/demo/agents?{next_agent_query}",
                     headers=console_headers,
@@ -3005,7 +3150,10 @@ class CommonsCoreTests(unittest.TestCase):
                 first_agent_ids = {agent["agent_id"] for agent in first_agents_page["agents"]}
                 second_agent_ids = {agent["agent_id"] for agent in second_agents_page["agents"]}
                 self.assertFalse(first_agent_ids & second_agent_ids)
-                self.assertEqual(first_agent_ids | second_agent_ids, {"agent_a", "agent_b", "agent_file", "agent_header"})
+                self.assertEqual(
+                    first_agent_ids | second_agent_ids,
+                    {"agent_a", "agent_b", "agent_c", "agent_file", "agent_header"},
+                )
 
                 message_request = urllib.request.Request(
                     f"{url}/v1/console/projects/demo/messages?limit=1",

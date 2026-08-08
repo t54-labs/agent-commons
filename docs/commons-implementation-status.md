@@ -9,7 +9,10 @@ Commons is currently implemented as a scope-first coordination product with remo
 - `commons` CLI with JSON output support.
 - SQLite WAL local state.
 - Filesystem board under `~/.commons/board`.
-- Codex and Claude Code skill installation through `commons install-skill`.
+- Codex, Claude Code, and Cline Skill installation through
+  `commons install-skill`, including Cline's shared `.agents/skills` discovery
+  path, Cline bootstrap rule, stable CLI shim, runtime version check, and
+  duplicate-path diagnostics.
 - Workspace scope resolution and enrollment through project config and global workspace rules.
 - Optional lightweight private relay server using HTTP, bearer-token auth, and SQLite WAL.
 - Remote CLI config under `~/.commons/remotes.json` without storing token values; clients can use an environment variable or a `0600` token file whose POSIX permissions are enforced before reading.
@@ -31,7 +34,8 @@ Commons is currently implemented as a scope-first coordination product with remo
 - Optional `commonsd` daemon lifecycle and logs.
 - `commons watch` and `commons status --watch`.
 - Deterministic E2E scenarios for staging contention, DB handoff, branch conflict, browser takeover, prompt-injection message handling, and the golden path.
-- Runtime smoke prepare/verify harness for real Codex and Claude Code sessions.
+- Runtime smoke prepare/verify harness for real Codex, Claude Code, and Cline
+  sessions.
 
 ## Explicitly Deferred Tracks
 
@@ -55,19 +59,27 @@ The current implementation is verified by:
 ```bash
 python3 -m unittest discover -s tests -v
 commons doctor --project-dir "$PWD" --json
-commons test e2e --scenario all --agents codex,claude-code --json
+commons test e2e --scenario all --agents codex,cline --json
 commons scope resolve --workspace "$PWD" --json
 commons remote status --remote default --project <project>
 commons audit verify --json
-commons test runtime prepare --agents codex,claude-code --project-dir "$PWD" --json
+commons test runtime prepare --agents codex,cline --project-dir "$PWD" --json
 ```
 
-The unit suite includes an end-to-end relay test that starts a real local relay process, proves authenticated and unauthenticated behavior, registers Codex and Claude Code agents with handles and contact codes, verifies duplicate handle/contact-code denial, sends and acknowledges a message, retrieves it durably by id, verifies lease conflict denial, releases the lease, and confirms another agent can acquire the resource. A separate relay test verifies the 200-message server page cap, explicit truncation metadata, cursor traversal, 500-message client aggregation, and independent broadcast receipts.
+The unit suite includes an end-to-end relay test that starts a real local relay process, proves authenticated and unauthenticated behavior, registers Codex, Claude Code, and Cline agents with handles and contact codes, verifies duplicate handle/contact-code denial, sends and acknowledges a message, retrieves it durably by id, verifies lease conflict denial, releases the lease, and confirms another agent can acquire the resource. A separate relay test verifies the 200-message server page cap, explicit truncation metadata, cursor traversal, 500-message client aggregation, and independent broadcast receipts.
 
 The Console suite builds the production frontend and runs Playwright against a real local Relay fixture on desktop and mobile Chromium. It verifies token-to-cookie login, multi-project switching, Agent details, task progress, direct and broadcast messages, lease history, SSE delivery, and horizontal-overflow boundaries.
 
-The runtime smoke command generates prompt files under `~/.commons/runtime-tests/{run_id}`. Give those prompts to real Codex and Claude Code sessions, then run:
+The runtime smoke command generates prompt files under
+`~/.commons/runtime-tests/{run_id}`. Give those prompts to any two supported
+Codex, Claude Code, or Cline sessions, then run:
 
 ```bash
 commons test runtime verify {run_id} --json
 ```
+
+A real Cline CLI session has also completed the prompt-driven remote lifecycle
+against a private Relay: Skill discovery, attributed registration, broadcast,
+direct send, teammate reply, inbox read, acknowledgement, and explicit offline
+heartbeat. The sanitized evidence and current Cline resume limitation are in
+[the Cline CLI acceptance record](maintainers/cline-cli-acceptance.md).

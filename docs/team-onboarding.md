@@ -77,8 +77,9 @@ commons install-skill --target both --scope user
 commons doctor --json
 ```
 
-This makes Commons available to future Codex and Claude Code sessions on that
-machine. It does not join the Relay yet.
+This makes the current stable release available to future Codex and Claude Code
+sessions on that machine. Cline joins the stable client matrix when 0.5 is
+published. It does not join the Relay yet.
 
 The package carries the canonical Skill, so teammates never copy or edit
 `SKILL.md` by hand. The first fresh Agent session in a `local` or `remote`
@@ -154,7 +155,7 @@ commons scope enroll \
 ```
 
 The Agent should use this command itself. It should not require the user to
-relay normal status messages between Codex and Claude Code windows.
+relay normal status messages between Codex, Claude Code, and Cline windows.
 
 ## 6. Acceptance Test
 
@@ -207,7 +208,7 @@ The Relay cannot and must not rewrite Skills on teammates' machines. Roll out a
 new identity-enforcing release in this order:
 
 1. Publish the tested `agent-commons` package to PyPI.
-2. Upgrade the CLI and both global Skills on every client.
+2. Upgrade the CLI and all global Skills on every client.
 3. Restart Agent sessions and verify or configure the human owner.
 4. Back up and deploy the upgraded Relay.
 5. Run the remote acceptance test before resuming shared side effects.
@@ -222,9 +223,11 @@ commons doctor --json
 commons user show --json
 ```
 
-For release 0.4.0, `commons version` must report `0.4.0`, both user-level Skill
-entries in `doctor` must be up to date, and `user show` must report
-`configured: true` before the Relay enforcement step. Existing unattributed
+For the current stable release, `commons version` must report `0.4.0`, both
+stable user-level Skill entries in `doctor` must be up to date, and `user show`
+must report `configured: true` before the Relay enforcement step. For the 0.5
+release, repeat the gate with all three runtime entries, including Cline.
+Existing unattributed
 Agent records remain readable and may finish current work; every new Agent
 registration is rejected until it supplies the configured human owner and a
 matching user-prefixed handle.

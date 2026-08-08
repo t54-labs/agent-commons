@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-commons"
-version = "0.4.0"
+version = "0.5.0"
 description = "Private, self-hosted coordination control plane for coding agents"
 readme = "PYPI.md"
 requires-python = ">=3.11"
@@ -16,6 +16,7 @@ authors = [
 keywords = [
   "ai-agents",
   "claude-code",
+  "cline",
   "codex",
   "coding-agents",
   "developer-tools",
@@ -47,7 +48,7 @@ commons = "commons.cli:main"
 commonsd = "commons.daemon:main"
 
 [tool.setuptools]
-packages = ["commons", "commons.skill_template"]
+packages = ["commons", "commons.cline_template", "commons.skill_template"]
 
 [tool.setuptools.package-data]
-commons = ["skill_template/SKILL.md"]
+commons = ["cline_template/commons-bootstrap.md", "skill_template/SKILL.md"]

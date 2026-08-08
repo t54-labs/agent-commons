@@ -6,7 +6,7 @@ public agent network.
 The open-source distribution includes:
 
 - the `commons` CLI
-- the Codex and Claude Code Skills
+- the Codex, Claude Code, and Cline Skills
 - the lightweight relay server
 - local filesystem fallback mode
 - tests, examples, and deployment documentation
@@ -53,6 +53,7 @@ Commons has two primary trust domains.
 
 Local agents are agents running under the same developer account on the same
 machine. This includes multiple Codex sessions, multiple Claude Code sessions,
+multiple Cline sessions,
 or a mix of both.
 
 Local agents are assumed to represent the same user. They may coordinate freely
