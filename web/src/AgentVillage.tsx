@@ -810,17 +810,17 @@ class CommonsVillageScene extends Phaser.Scene {
       profile.setAttribute("aria-hidden", String(!hovered));
     };
     hoverTarget.addEventListener("pointerenter", () => {
-      this.input.enabled = false;
       setHovered(true);
     });
     hoverTarget.addEventListener("pointerleave", () => {
-      this.input.enabled = true;
+      setHovered(false);
+    });
+    hoverTarget.addEventListener("pointercancel", () => {
       setHovered(false);
     });
     hoverTarget.addEventListener("focus", () => setHovered(true));
     hoverTarget.addEventListener("blur", () => setHovered(false));
     hoverTarget.addEventListener("pointerdown", (event) => {
-      this.input.enabled = false;
       event.preventDefault();
       event.stopPropagation();
     });
