@@ -23,7 +23,7 @@
   "devDependencies": {
     "@playwright/test": "1.61.1",
     "@types/pathfinding": "^0.1.0",
-    "@types/react": "^19.2.0",
+    "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "4.7.0",
     "typescript": "^5.9.0",
