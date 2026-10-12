@@ -11,7 +11,7 @@
     "render:poster": "remotion still src/index.ts CommonsPoster out/commons-poster.png"
   },
   "dependencies": {
-    "@remotion/media": "4.0.499",
+    "@remotion/media": "4.0.501",
     "lucide-react": "1.26.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
